@@ -1,0 +1,5 @@
+[project]
+name = "txt2midi"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["midiutil>=1.2.1", "pyfluidsynth>=1.3.4", "pygobject>=3.54.5"]
