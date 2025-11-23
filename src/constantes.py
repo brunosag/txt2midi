@@ -1,5 +1,7 @@
+from pathlib import Path
+
 # Caminho padrão para o SoundFont
-DEFAULT_SOUNDFONT = 'FluidR3_GM.sf2'
+DEFAULT_SOUNDFONT = Path('FluidR3_GM.sf2')
 
 # Mapeamento de notas base (Oitava 5) para números MIDI
 NOTAS_MIDI_BASE = {
@@ -29,3 +31,6 @@ INSTRUMENTOS = [
     (125, 'Telephone Ring'),
     (127, 'Gunshot'),
 ]
+
+# Valor máximo para dados MIDI (notas, volume, etc.)
+MAX_MIDI_VALUE = 127

@@ -1,6 +1,6 @@
 import sys
 
-from src.ui import Aplicacao
+from ui import Aplicacao
 
 if __name__ == '__main__':
     app = Aplicacao()
