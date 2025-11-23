@@ -11,7 +11,7 @@ dev = ["basedpyright>=1.34.0", "pygobject-stubs>=2.14.0"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatch.build.targets.sdist]
+[tool.hatch.build.targets.wheel]
 only-include = ["src"]
 sources = ["src"]
 
@@ -21,3 +21,6 @@ extend = "~/.config/ruff/ruff.toml"
 
 [tool.ruff.lint]
 ignore = ["S311"]
+
+[tool.basedpyright]
+ignore = ["typings"]

@@ -19,7 +19,7 @@ class EventoTempo(EventoMusical):
 class EventoInstrumento(EventoMusical):
     """Evento de mudança de instrumento."""
 
-    instrumento_id: int
+    instrument_id: int
 
 
 @dataclass
@@ -35,7 +35,7 @@ class EventoNota(EventoMusical):
 class EventoNotaEspecifica(EventoMusical):
     """Evento de nota com instrumento específico."""
 
-    instrumento_id: int
+    instrument_id: int
     pitch: int
     volume: int
     duracao: float

@@ -1,7 +1,7 @@
 import random
 
-from constantes import INSTRUMENTOS, MAX_MIDI_VALUE, NOTAS_MIDI_BASE
-from eventos import (
+from config import INSTRUMENTOS, MAX_MIDI_VALUE, NOTAS_MIDI_BASE
+from domain.events import (
     EventoInstrumento,
     EventoMusical,
     EventoNota,
@@ -9,10 +9,10 @@ from eventos import (
     EventoPausa,
     EventoTempo,
 )
-from modelo import EstadoMusical
+from domain.models import ParsingContext, PlaybackSettings
 
 
-class MapeadorRegras:
+class TextParser:
     """Implementa o mapeamento de texto para eventos musicais."""
 
     def _get_nota_midi(self, nota_char: str, oitava: int) -> int:
@@ -25,169 +25,170 @@ class MapeadorRegras:
         mod_oitava = (oitava - 5) * 12
         return base_nota + mod_oitava
 
-    def processar_texto(
+    def parse(
         self,
         texto: str,
-        estado_processamento: EstadoMusical,
+        settings: PlaybackSettings,
     ) -> list[EventoMusical]:
         """Processar texto e retornar lista de eventos musicais."""
-        eventos = self._inicializar_eventos(estado_processamento)
+        context = ParsingContext(settings)
+        eventos = self._inicializar_eventos(context)
 
         i = 0
         while i < len(texto):
             # Checagem especial 'BPM+'
             if i + 3 < len(texto) and texto[i : i + 4].upper() == 'BPM+':
-                self._tratar_bpm_mais(estado_processamento, eventos)
+                self._tratar_bpm_mais(context, eventos)
                 i += 4
                 continue
 
             char = texto[i]
-            self._processar_caractere(char, estado_processamento, eventos)
-
-            # Avançar o tempo da música (em batidas)
-            estado_processamento.tempo_evento += 1.0
+            self._processar_caractere(char, context, eventos)
+            context.tempo_evento += 1.0
             i += 1
 
         return eventos
 
     def _inicializar_eventos(
         self,
-        estado: EstadoMusical,
+        context: ParsingContext,
     ) -> list[EventoMusical]:
         """Inicializar a lista de eventos e configurar o estado."""
-        estado.redefinir_para_playback()
+        if not hasattr(context, 'tempo_evento'):
+            context.tempo_evento = 0.0
+        if not hasattr(context, 'instrument_id'):
+            pass
+
         return [
-            EventoTempo(tempo=estado.tempo_evento, bpm=estado.bpm),
+            EventoTempo(tempo=context.tempo_evento, bpm=context.bpm),
             EventoInstrumento(
-                tempo=estado.tempo_evento,
-                instrumento_id=estado.instrumento_id,
+                tempo=context.tempo_evento, instrument_id=context.instrument_id
             ),
         ]
 
     def _processar_caractere(
         self,
         char: str,
-        estado: EstadoMusical,
+        context: ParsingContext,
         eventos: list[EventoMusical],
     ) -> None:
         """Processar um único caractere e atualizar estado/eventos."""
         char_lower = char.lower()
 
         if char_lower in 'abcdefgh':
-            self._tratar_nota(char, estado, eventos)
+            self._tratar_nota(char, context, eventos)
         elif char == ' ':
-            self._tratar_volume(estado)
+            self._tratar_volume(context)
         elif char in '+-':
-            self._tratar_oitava(char, estado)
+            self._tratar_oitava(char, context)
         elif char_lower in 'oiu':
-            self._tratar_vogal(estado, eventos)
+            self._tratar_vogal(context, eventos)
         elif char == '?':
-            self._tratar_aleatorio(estado, eventos)
+            self._tratar_aleatorio(context, eventos)
         elif char == '\n':
-            self._tratar_troca_instrumento(estado, eventos)
+            self._tratar_troca_instrumento(context, eventos)
         elif char == ';':
-            self._tratar_pausa(estado, eventos)
+            self._tratar_pausa(context, eventos)
 
     def _tratar_bpm_mais(
         self,
-        estado: EstadoMusical,
+        context: ParsingContext,
         eventos: list[EventoMusical],
     ) -> None:
-        estado.bpm += 80
-        eventos.append(EventoTempo(tempo=estado.tempo_evento, bpm=estado.bpm))
+        context.bpm += 80
+        eventos.append(EventoTempo(tempo=context.tempo_evento, bpm=context.bpm))
 
     def _tratar_nota(
         self,
         char: str,
-        estado: EstadoMusical,
+        context: ParsingContext,
         eventos: list[EventoMusical],
     ) -> None:
-        nota_midi = self._get_nota_midi(char, estado.oitava)
+        nota_midi = self._get_nota_midi(char, context.octave)
         if 0 <= nota_midi <= MAX_MIDI_VALUE:
             eventos.append(
                 EventoNota(
-                    tempo=estado.tempo_evento,
+                    tempo=context.tempo_evento,
                     pitch=nota_midi,
-                    volume=estado.volume,
+                    volume=context.volume,
                     duracao=1.0,
                 ),
             )
-            estado.ultima_nota_midi = nota_midi
+            context.last_note_midi = nota_midi
         else:
-            self._tratar_pausa(estado, eventos)
+            self._tratar_pausa(context, eventos)
 
-    def _tratar_volume(self, estado: EstadoMusical) -> None:
-        estado.volume = min(estado.volume * 2, MAX_MIDI_VALUE)
-        estado.ultima_nota_midi = -1
+    def _tratar_volume(self, context: ParsingContext) -> None:
+        context.volume = min(context.volume * 2, MAX_MIDI_VALUE)
+        context.last_note_midi = -1
 
-    def _tratar_oitava(self, char: str, estado: EstadoMusical) -> None:
+    def _tratar_oitava(self, char: str, context: ParsingContext) -> None:
         if char == '+':
-            estado.oitava = min(estado.oitava + 1, 10)
+            context.octave = min(context.octave + 1, 10)
         else:
-            estado.oitava = max(estado.oitava - 1, 1)
-        estado.ultima_nota_midi = -1
+            context.octave = max(context.octave - 1, 1)
+        context.last_note_midi = -1
 
     def _tratar_vogal(
         self,
-        estado: EstadoMusical,
+        context: ParsingContext,
         eventos: list[EventoMusical],
     ) -> None:
-        if estado.ultima_nota_midi != -1:
+        if context.last_note_midi != -1:
             eventos.append(
                 EventoNota(
-                    tempo=estado.tempo_evento,
-                    pitch=estado.ultima_nota_midi,
-                    volume=estado.volume,
+                    tempo=context.tempo_evento,
+                    pitch=context.last_note_midi,
+                    volume=context.volume,
                     duracao=1.0,
                 ),
             )
         else:
-            # Tocar telefone (GM #125)
             nota_telefone = self._get_nota_midi('c', 5)
             eventos.append(
                 EventoNotaEspecifica(
-                    tempo=estado.tempo_evento,
-                    instrumento_id=125,
+                    tempo=context.tempo_evento,
+                    instrument_id=125,
                     pitch=nota_telefone,
                     volume=100,
                     duracao=1.0,
                 ),
             )
-            estado.ultima_nota_midi = -1
+            context.last_note_midi = -1
 
     def _tratar_aleatorio(
         self,
-        estado: EstadoMusical,
+        context: ParsingContext,
         eventos: list[EventoMusical],
     ) -> None:
         nota_rand_char = random.choice('abcdefgh')
-        self._tratar_nota(nota_rand_char, estado, eventos)
+        self._tratar_nota(nota_rand_char, context, eventos)
 
     def _tratar_troca_instrumento(
         self,
-        estado: EstadoMusical,
+        context: ParsingContext,
         eventos: list[EventoMusical],
     ) -> None:
         ids_instrumentos = [id_inst for id_inst, _ in INSTRUMENTOS]
         try:
-            idx_atual = ids_instrumentos.index(estado.instrumento_id)
+            idx_atual = ids_instrumentos.index(context.instrument_id)
             idx_novo = (idx_atual + 1) % len(ids_instrumentos)
         except ValueError:
             idx_novo = 0
 
-        estado.instrumento_id = ids_instrumentos[idx_novo]
+        context.instrument_id = ids_instrumentos[idx_novo]
         eventos.append(
             EventoInstrumento(
-                tempo=estado.tempo_evento,
-                instrumento_id=estado.instrumento_id,
+                tempo=context.tempo_evento,
+                instrument_id=context.instrument_id,
             ),
         )
-        estado.ultima_nota_midi = -1
+        context.last_note_midi = -1
 
     def _tratar_pausa(
         self,
-        estado: EstadoMusical,
+        context: ParsingContext,
         eventos: list[EventoMusical],
     ) -> None:
-        eventos.append(EventoPausa(tempo=estado.tempo_evento, duracao=1.0))
-        estado.ultima_nota_midi = -1
+        eventos.append(EventoPausa(tempo=context.tempo_evento, duracao=1.0))
+        context.last_note_midi = -1
