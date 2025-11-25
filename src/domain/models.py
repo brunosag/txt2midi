@@ -19,5 +19,5 @@ class ParsingContext:
         self.volume: int = settings.volume
         self.bpm: int = settings.bpm
         self.instrument_id: int = settings.instrument_id
-        self.last_note_midi: int = -1
+        self.default_length: float = 4.0  # Default to Quarter note (1/4)
         self.tempo_evento: float = 0.0

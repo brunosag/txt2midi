@@ -1,11 +1,10 @@
-import random
+import re
 
-from config import INSTRUMENTOS, MAX_MIDI_VALUE, NOTAS_MIDI_BASE
+from config import NOTAS_MIDI_BASE
 from domain.events import (
     EventoInstrumento,
     EventoMusical,
     EventoNota,
-    EventoNotaEspecifica,
     EventoPausa,
     EventoTempo,
 )
@@ -13,199 +12,182 @@ from domain.models import ParsingContext, PlaybackSettings
 
 
 class TextParser:
-    """Implementa o mapeamento de texto para eventos musicais."""
+    """Parses MML-like text into musical events."""
 
-    def _get_nota_midi(self, nota_char: str, oitava: int) -> int:
-        """Calcular valor MIDI de uma nota (A-H) na oitava especificada."""
-        base_nota = NOTAS_MIDI_BASE.get(nota_char.upper(), -1)
-        if base_nota == -1:
-            return -1
+    # Regex patterns for tokenizing
+    TOKEN_REGEX = re.compile(
+        r"""
+        (?P<note>[A-G][#\+\-b]?)      # Notes: C, C#, Db, etc.
+        |(?P<rest>[RP])               # Rests
+        |(?P<octave_set>O(?=\d))      # Octave set: O5
+        |(?P<octave_up>>+)            # Octave up
+        |(?P<octave_down><+)          # Octave down
+        |(?P<length_set>L(?=\d))      # Default length: L4
+        |(?P<tempo>T(?=\d))           # Tempo: T120
+        |(?P<volume>V(?=\d))          # Volume: V100
+        |(?P<instrument>I(?=\d))      # Instrument: I0
+        """,
+        re.VERBOSE | re.IGNORECASE,
+    )
 
-        # Ajustar oitava (base é 5)
-        mod_oitava = (oitava - 5) * 12
-        return base_nota + mod_oitava
-
-    def parse(
-        self,
-        texto: str,
-        settings: PlaybackSettings,
-    ) -> list[EventoMusical]:
-        """Processar texto e retornar lista de eventos musicais."""
+    def parse(self, texto: str, settings: PlaybackSettings) -> list[EventoMusical]:
         context = ParsingContext(settings)
-        eventos = self._inicializar_eventos(context)
-
-        i = 0
-        while i < len(texto):
-            # Checagem especial 'BPM+'
-            if i + 3 < len(texto) and texto[i : i + 4].upper() == 'BPM+':
-                self._tratar_bpm_mais(context, eventos, i)
-                i += 4
-                continue
-
-            char = texto[i]
-            self._processar_caractere(char, context, eventos, i)
-            context.tempo_evento += 1.0
-            i += 1
-
-        return eventos
-
-    def _inicializar_eventos(
-        self,
-        context: ParsingContext,
-    ) -> list[EventoMusical]:
-        """Inicializar a lista de eventos e configurar o estado."""
-        if not hasattr(context, 'tempo_evento'):
-            context.tempo_evento = 0.0
-        if not hasattr(context, 'instrument_id'):
-            pass
-
-        return [
-            EventoTempo(tempo=context.tempo_evento, bpm=context.bpm, source_index=0),
+        # Use keyword arguments to avoid inheritance ordering issues
+        eventos: list[EventoMusical] = [
+            EventoTempo(
+                tempo=0.0,
+                bpm=context.bpm,
+                source_index=0,
+            ),
             EventoInstrumento(
-                tempo=context.tempo_evento,
+                tempo=0.0,
                 instrument_id=context.instrument_id,
                 source_index=0,
             ),
         ]
 
-    def _processar_caractere(
+        pos = 0
+        text_len = len(texto)
+
+        while pos < text_len:
+            # Try to match a token
+            match = self.TOKEN_REGEX.match(texto, pos)
+            if not match:
+                pos += 1
+                continue
+
+            token_type = match.lastgroup
+            token_str = match.group()
+            start_idx = match.start()
+            curr_pos = match.end()
+
+            if token_type == 'note':
+                duration, new_pos = self._calculate_duration(texto, curr_pos, context)
+
+                # Parse Pitch
+                base_char = token_str[0].upper()
+                accidental = token_str[1] if len(token_str) > 1 else None
+
+                pitch = NOTAS_MIDI_BASE.get(base_char, 60)
+                if accidental in ('#', '+'):
+                    pitch += 1
+                elif accidental in ('b', '-'):
+                    pitch -= 1
+
+                # Adjust Octave
+                pitch += (context.octave - 5) * 12
+
+                # Validate range
+                pitch = max(0, min(127, pitch))
+
+                eventos.append(
+                    EventoNota(
+                        tempo=context.tempo_evento,
+                        pitch=pitch,
+                        volume=context.volume,
+                        duracao=duration,
+                        source_index=start_idx,
+                    )
+                )
+                context.tempo_evento += duration
+                pos = new_pos
+
+            elif token_type == 'rest':
+                duration, new_pos = self._calculate_duration(texto, curr_pos, context)
+                eventos.append(
+                    EventoPausa(
+                        tempo=context.tempo_evento,
+                        duracao=duration,
+                        source_index=start_idx,
+                    )
+                )
+                context.tempo_evento += duration
+                pos = new_pos
+
+            elif token_type in (
+                'octave_set',
+                'length_set',
+                'tempo',
+                'volume',
+                'instrument',
+            ):
+                val, new_pos = self._read_number(texto, curr_pos)
+
+                if token_type == 'octave_set':
+                    context.octave = max(0, min(val, 10))
+                elif token_type == 'length_set':
+                    context.default_length = max(1, val)
+                elif token_type == 'tempo':
+                    context.bpm = max(1, val)
+                    eventos.append(
+                        EventoTempo(
+                            tempo=context.tempo_evento,
+                            bpm=context.bpm,
+                            source_index=start_idx,
+                        )
+                    )
+                elif token_type == 'volume':
+                    context.volume = max(0, min(val, 127))
+                elif token_type == 'instrument':
+                    context.instrument_id = max(0, min(val, 127))
+                    eventos.append(
+                        EventoInstrumento(
+                            tempo=context.tempo_evento,
+                            instrument_id=context.instrument_id,
+                            source_index=start_idx,
+                        )
+                    )
+                pos = new_pos
+
+            elif token_type == 'octave_up':
+                context.octave = min(context.octave + len(token_str), 10)
+                pos = curr_pos
+
+            elif token_type == 'octave_down':
+                context.octave = max(context.octave - len(token_str), 0)
+                pos = curr_pos
+
+            else:
+                pos = curr_pos
+
+        return eventos
+
+    def _read_number(self, text: str, pos: int) -> tuple[int, int]:
+        """Reads a number starting at pos. Returns (value, new_pos)."""
+        match = re.match(r'\d+', text[pos:])
+        if match:
+            return int(match.group()), pos + match.end()
+        return 0, pos
+
+    def _calculate_duration(
         self,
-        char: str,
+        text: str,
+        pos: int,
         context: ParsingContext,
-        eventos: list[EventoMusical],
-        index: int,
-    ) -> None:
-        """Processar um único caractere e atualizar estado/eventos."""
-        char_lower = char.lower()
+    ) -> tuple[float, int]:
+        """Determines duration based on optional number and dots.
+        Returns (duration_in_beats, new_pos).
+        """
+        # Read number (e.g., '4' in 'C4')
+        value_num, new_pos = self._read_number(text, pos)
 
-        if char_lower in 'abcdefgh':
-            self._tratar_nota(char, context, eventos, index)
-        elif char == ' ':
-            self._tratar_volume(context)
-        elif char in '+-':
-            self._tratar_oitava(char, context)
-        elif char_lower in 'oiu':
-            self._tratar_vogal(context, eventos, index)
-        elif char == '?':
-            self._tratar_aleatorio(context, eventos, index)
-        elif char == '\n':
-            self._tratar_troca_instrumento(context, eventos, index)
-        elif char == ';':
-            self._tratar_pausa(context, eventos, index)
+        # If no number provided, use default
+        length_val = value_num if value_num > 0 else context.default_length
 
-    def _tratar_bpm_mais(
-        self,
-        context: ParsingContext,
-        eventos: list[EventoMusical],
-        index: int,
-    ) -> None:
-        context.bpm += 80
-        eventos.append(
-            EventoTempo(tempo=context.tempo_evento, bpm=context.bpm, source_index=index)
-        )
+        duration = 4.0 / length_val
 
-    def _tratar_nota(
-        self,
-        char: str,
-        context: ParsingContext,
-        eventos: list[EventoMusical],
-        index: int,
-    ) -> None:
-        nota_midi = self._get_nota_midi(char, context.octave)
-        if 0 <= nota_midi <= MAX_MIDI_VALUE:
-            eventos.append(
-                EventoNota(
-                    tempo=context.tempo_evento,
-                    pitch=nota_midi,
-                    volume=context.volume,
-                    duracao=1.0,
-                    source_index=index,
-                ),
-            )
-            context.last_note_midi = nota_midi
-        else:
-            self._tratar_pausa(context, eventos, index)
+        # Check for dots ('.')
+        dots = 0
+        while new_pos < len(text) and text[new_pos] == '.':
+            dots += 1
+            new_pos += 1
 
-    def _tratar_volume(self, context: ParsingContext) -> None:
-        context.volume = min(context.volume * 2, MAX_MIDI_VALUE)
-        context.last_note_midi = -1
+        # Apply dot modifier (adds half of previous value)
+        if dots > 0:
+            original_dur = duration
+            add = original_dur * 0.5
+            for _ in range(dots):
+                duration += add
+                add *= 0.5
 
-    def _tratar_oitava(self, char: str, context: ParsingContext) -> None:
-        if char == '+':
-            context.octave = min(context.octave + 1, 10)
-        else:
-            context.octave = max(context.octave - 1, 1)
-        context.last_note_midi = -1
-
-    def _tratar_vogal(
-        self,
-        context: ParsingContext,
-        eventos: list[EventoMusical],
-        index: int,
-    ) -> None:
-        if context.last_note_midi != -1:
-            eventos.append(
-                EventoNota(
-                    tempo=context.tempo_evento,
-                    pitch=context.last_note_midi,
-                    volume=context.volume,
-                    duracao=1.0,
-                    source_index=index,
-                ),
-            )
-        else:
-            nota_telefone = self._get_nota_midi('c', 5)
-            eventos.append(
-                EventoNotaEspecifica(
-                    tempo=context.tempo_evento,
-                    instrument_id=125,
-                    pitch=nota_telefone,
-                    volume=100,
-                    duracao=1.0,
-                    source_index=index,
-                ),
-            )
-            context.last_note_midi = -1
-
-    def _tratar_aleatorio(
-        self,
-        context: ParsingContext,
-        eventos: list[EventoMusical],
-        index: int,
-    ) -> None:
-        nota_rand_char = random.choice('abcdefgh')
-        self._tratar_nota(nota_rand_char, context, eventos, index)
-
-    def _tratar_troca_instrumento(
-        self,
-        context: ParsingContext,
-        eventos: list[EventoMusical],
-        index: int,
-    ) -> None:
-        ids_instrumentos = [id_inst for id_inst, _ in INSTRUMENTOS]
-        try:
-            idx_atual = ids_instrumentos.index(context.instrument_id)
-            idx_novo = (idx_atual + 1) % len(ids_instrumentos)
-        except ValueError:
-            idx_novo = 0
-
-        context.instrument_id = ids_instrumentos[idx_novo]
-        eventos.append(
-            EventoInstrumento(
-                tempo=context.tempo_evento,
-                instrument_id=context.instrument_id,
-                source_index=index,
-            ),
-        )
-        context.last_note_midi = -1
-
-    def _tratar_pausa(
-        self,
-        context: ParsingContext,
-        eventos: list[EventoMusical],
-        index: int,
-    ) -> None:
-        eventos.append(
-            EventoPausa(tempo=context.tempo_evento, duracao=1.0, source_index=index)
-        )
-        context.last_note_midi = -1
+        return duration, new_pos

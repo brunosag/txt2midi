@@ -6,54 +6,40 @@
   </metadata>
 
   <styles>
+    <style id="command" _name="Command" map-to="def:keyword"/>
     <style id="note" _name="Note" map-to="def:string"/>
-    <style id="bpm" _name="BPM Change" map-to="def:keyword"/>
-    <style id="octave" _name="Octave Change" map-to="def:operator"/>
-    <style id="volume" _name="Volume Change" map-to="def:type"/>
-    <style id="instrument" _name="Instrument Change" map-to="def:identifier"/>
-    <style id="vowel" _name="Vowel" map-to="def:constant"/>
-    <style id="random" _name="Random Note" map-to="def:special-char"/>
-    <style id="pause" _name="Pause" map-to="def:comment"/>
+    <style id="number" _name="Number" map-to="def:constant"/>
+    <style id="modifier" _name="Modifier" map-to="def:operator"/>
+    <style id="comment" _name="Comment" map-to="def:comment"/>
   </styles>
 
   <definitions>
     <context id="tcp">
       <include>
-        <context id="bpm-plus" style-ref="bpm">
-          <match case-sensitive="false">BPM\+</match>
+        <context id="commands" style-ref="command">
+          <match case-sensitive="false">[TVLOI]</match>
+        </context>
+
+        <context id="octave-shift" style-ref="command">
+           <match>[&gt;&lt;]</match>
         </context>
 
         <context id="notes" style-ref="note">
-          <match case-sensitive="false">[A-G]</match>
-        </context>
-
-        <context id="octave-plus" style-ref="octave">
-          <match>\+</match>
+          <match case-sensitive="false">[A-G][#\+\-b]?</match>
         </context>
         
-        <context id="octave-minus" style-ref="octave">
-          <match>-</match>
+        <context id="rests" style-ref="note">
+          <match case-sensitive="false">[RP]</match>
         </context>
 
-        <context id="volume-space" style-ref="volume">
-          <match> </match>
+        <context id="values" style-ref="number">
+          <match>\d+</match>
         </context>
 
-        <context id="instrument-newline" style-ref="instrument">
-          <match>\n</match>
+        <context id="dots" style-ref="modifier">
+          <match>\.</match>
         </context>
 
-        <context id="vowels" style-ref="vowel">
-          <match case-sensitive="false">[OUI]</match>
-        </context>
-
-        <context id="random-q" style-ref="random">
-          <match>\?</match>
-        </context>
-        
-        <context id="pause-semi" style-ref="pause">
-          <match>;</match>
-        </context>
       </include>
     </context>
   </definitions>
