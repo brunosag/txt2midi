@@ -74,7 +74,22 @@ class JanelaPrincipal(Adw.ApplicationWindow):
         self.add_action(action_abrir_txt)
         self.btn_abrir.set_action_name('win.abrir_txt')  # Linkar o botão à ação
 
-        box_esquerda.append(self.btn_abrir)  # Adicionar ao box da esquerda
+        box_esquerda.append(self.btn_abrir)
+
+        # --- Novo: Botão 'Importar MIDI' ---
+        self.btn_importar: Gtk.Button = Gtk.Button()
+        self.btn_importar.set_icon_name('folder-music-symbolic')
+        self.btn_importar.set_tooltip_text('Importar MIDI')
+
+        action_importar_midi: Gio.SimpleAction = Gio.SimpleAction.new(
+            'importar_midi', None
+        )
+        _ = action_importar_midi.connect('activate', self._on_importar_midi_clicked)
+        self.add_action(action_importar_midi)
+        self.btn_importar.set_action_name('win.importar_midi')
+
+        box_esquerda.append(self.btn_importar)
+        # -----------------------------------
 
         # Menu 'Salvar'
         menu_salvar_model = Gio.Menu()
@@ -96,7 +111,7 @@ class JanelaPrincipal(Adw.ApplicationWindow):
         _ = action_salvar_midi.connect('activate', self._on_salvar_midi_clicked)
         self.add_action(action_salvar_midi)
 
-        box_esquerda.append(self.btn_menu_salvar)  # Adicionar ao box da esquerda
+        box_esquerda.append(self.btn_menu_salvar)
 
         # Controles
         box_controles = Gtk.Box(spacing=6)
@@ -198,6 +213,54 @@ class JanelaPrincipal(Adw.ApplicationWindow):
                 conteudo = f.read()
             self.text_editor.set_text(conteudo)
             self._show_toast(f"Texto '{self.caminho_txt_atual.name}' carregado.")
+        dialog.destroy()
+
+    def _on_importar_midi_clicked(
+        self,
+        _action: Gio.SimpleAction,
+        _param: GLib.Variant,
+    ) -> None:
+        """Abrir seletor de arquivo para importar MIDI."""
+        dialog = Gtk.FileChooserDialog(
+            title='Importar MIDI',
+            transient_for=self,
+            action=Gtk.FileChooserAction.OPEN,
+        )
+        _ = dialog.add_button(
+            button_text='_Cancelar',
+            response_id=Gtk.ResponseType.CANCEL,
+        )
+        _ = dialog.add_button(
+            button_text='_Importar',
+            response_id=Gtk.ResponseType.OK,
+        )
+
+        filter_midi = Gtk.FileFilter()
+        filter_midi.set_name('MIDI files (*.mid, *.midi)')
+        filter_midi.add_pattern('*.mid')
+        filter_midi.add_pattern('*.midi')
+        dialog.add_filter(filter_midi)
+
+        _ = dialog.connect('response', self._on_importar_midi_response)
+        dialog.show()
+
+    def _on_importar_midi_response(
+        self,
+        dialog: Gtk.FileChooserDialog,
+        response: Gtk.ResponseType,
+    ) -> None:
+        if (
+            response == Gtk.ResponseType.OK
+            and (file := dialog.get_file())
+            and (path := file.get_path())
+        ):
+            try:
+                texto_convertido = self.controller.import_midi(Path(path))
+                self.text_editor.set_text(texto_convertido)
+                self.caminho_txt_atual = None
+                self._show_toast('Arquivo MIDI importado com sucesso.')
+            except Exception as e:
+                self._show_toast(f'Erro ao importar MIDI: {e}')
         dialog.destroy()
 
     def _on_salvar_txt_clicked(

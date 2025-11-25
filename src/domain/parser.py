@@ -15,9 +15,10 @@ class TextParser:
     """Parses MML-like text into musical events."""
 
     # Regex patterns for tokenizing
+    # UPDATED: Added 'H' to the note group [A-H]
     TOKEN_REGEX = re.compile(
         r"""
-        (?P<note>[A-G][#\+\-b]?)      # Notes: C, C#, Db, etc.
+        (?P<note>[A-H][#\+\-b]?)      # Notes: A-H, plus accidentals
         |(?P<rest>[RP])               # Rests
         |(?P<octave_set>O(?=\d))      # Octave set: O5
         |(?P<octave_up>>+)            # Octave up

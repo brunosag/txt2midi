@@ -5,12 +5,14 @@ from domain.models import PlaybackSettings
 from domain.parser import TextParser
 from infrastructure.audio_player import FluidSynthPlayer
 from infrastructure.midi_exporter import MIDIExporter
+from infrastructure.midi_importer import MIDIImporter
 
 
 class MusicController:
     def __init__(self) -> None:
         self.parser: TextParser = TextParser()
         self.exporter: MIDIExporter = MIDIExporter()
+        self.importer: MIDIImporter = MIDIImporter()
         self.current_player: FluidSynthPlayer | None = None
 
     def play_music(
@@ -50,3 +52,7 @@ class MusicController:
         """Parse text and export to MIDI file."""
         eventos = self.parser.parse(text, settings)
         self.exporter.save(eventos, filepath)
+
+    def import_midi(self, filepath: Path) -> str:
+        """Import a MIDI file and convert it to text syntax."""
+        return self.importer.load(filepath)
