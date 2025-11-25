@@ -4,7 +4,6 @@ from typing import override
 import gi
 
 from application.controller import MusicController
-from config import DEFAULT_SOUNDFONT
 from domain.models import PlaybackSettings
 from ui.components import ConfigPanel, TextEditor
 
@@ -30,7 +29,6 @@ class JanelaPrincipal(Adw.ApplicationWindow):
 
         # Controlador da aplicação
         self.controller: MusicController = MusicController()
-        self.soundfont_path: Path = DEFAULT_SOUNDFONT
         self.caminho_txt_atual: Path | None = None
 
         # Caixa GTK principal
@@ -133,16 +131,19 @@ class JanelaPrincipal(Adw.ApplicationWindow):
         """Iniciar a reprodução e atualizar interface."""
         settings = self._get_ui_settings()
         texto = self._get_texto_atual()
+        soundfont_path = self.config_panel.get_soundfont_path()
 
         self.controller.play_music(
             text=texto,
             settings=settings,
-            soundfont_path=self.soundfont_path,
+            soundfont_path=soundfont_path,
             on_finished_callback=self._on_playback_terminado,
+            on_progress_callback=self.text_editor.highlight_char,
         )
         # Atualizar interface
         self.btn_tocar.set_sensitive(False)
         self.btn_parar.set_sensitive(True)
+        self.text_editor.set_editable(False)
 
     def _on_parar_clicked(self, _widget: Gtk.Button) -> None:
         """Solicitar parada da reprodução."""
@@ -152,6 +153,7 @@ class JanelaPrincipal(Adw.ApplicationWindow):
         """Atualizar botões de reprodução após término."""
         self.btn_tocar.set_sensitive(True)
         self.btn_parar.set_sensitive(False)
+        self.text_editor.set_editable(True)
 
     def _on_abrir_txt_clicked(
         self,

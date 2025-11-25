@@ -19,6 +19,7 @@ class MusicController:
         settings: PlaybackSettings,
         soundfont_path: Path,
         on_finished_callback: Callable[[], None] | None = None,
+        on_progress_callback: Callable[[int], None] | None = None,
     ) -> None:
         """Parse text and start playback."""
         self.stop_music()  # Stop any existing playback
@@ -29,6 +30,7 @@ class MusicController:
             eventos=eventos,
             settings=settings,
             on_finished_callback=on_finished_callback,
+            on_progress_callback=on_progress_callback,
         )
         self.current_player.start()
 

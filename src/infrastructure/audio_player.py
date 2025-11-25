@@ -30,6 +30,7 @@ class FluidSynthPlayer(threading.Thread):
         eventos: list[EventoMusical],
         settings: PlaybackSettings,
         on_finished_callback: Callable[[], None] | None = None,
+        on_progress_callback: Callable[[int], None] | None = None,
     ) -> None:
         super().__init__()
         self.fs: fluidsynth.Synth = fluidsynth.Synth()
@@ -38,6 +39,8 @@ class FluidSynthPlayer(threading.Thread):
         self.settings: PlaybackSettings = settings
         self._parar_requisicao: threading.Event = threading.Event()
         self.callback_parada: Callable[[], None] | None = on_finished_callback
+        self.callback_progresso: Callable[[int], None] | None = on_progress_callback
+        self.timers: list[threading.Timer] = []
 
     @override
     def run(self) -> None:
@@ -55,6 +58,9 @@ class FluidSynthPlayer(threading.Thread):
             tempo = evento.tempo
             self._aguardar_tempo(tempo, tempo_evento_anterior, bpm_atual)
 
+            if self.callback_progresso:
+                GLib.idle_add(self.callback_progresso, evento.source_index)
+
             if self._parar_requisicao.is_set():
                 break
 
@@ -66,6 +72,14 @@ class FluidSynthPlayer(threading.Thread):
             )
 
             tempo_evento_anterior = tempo
+
+        # Aguardar ou cancelar timers pendentes
+        if self._parar_requisicao.is_set():
+            for timer in self.timers:
+                timer.cancel()
+        else:
+            for timer in self.timers:
+                timer.join()
 
         self.fs.delete()
         _ = GLib.idle_add(self.notificar_parada_main_thread)
@@ -139,11 +153,16 @@ class FluidSynthPlayer(threading.Thread):
     ) -> None:
         duracao_seg = (60.0 / bpm_atual) * evento.duracao
         self.fs.noteon(chan=channel, key=evento.pitch, vel=evento.volume)
+
+        # Limpar timers finalizados
+        self.timers = [t for t in self.timers if t.is_alive()]
+
         timer = threading.Timer(
             duracao_seg,
             self.fs.noteoff,
             args=[channel, evento.pitch],
         )
+        self.timers.append(timer)
         timer.start()
 
     def _tocar_nota_especifica(
@@ -159,11 +178,15 @@ class FluidSynthPlayer(threading.Thread):
         self.fs.noteon(channel, evento.pitch, evento.volume)
         self.fs.program_change(channel, instrumento_original)
 
+        # Limpar timers finalizados
+        self.timers = [t for t in self.timers if t.is_alive()]
+
         timer = threading.Timer(
             duracao_seg,
             self.fs.noteoff,
             args=[channel, evento.pitch],
         )
+        self.timers.append(timer)
         timer.start()
 
     def stop(self) -> None:

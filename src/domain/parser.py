@@ -38,12 +38,12 @@ class TextParser:
         while i < len(texto):
             # Checagem especial 'BPM+'
             if i + 3 < len(texto) and texto[i : i + 4].upper() == 'BPM+':
-                self._tratar_bpm_mais(context, eventos)
+                self._tratar_bpm_mais(context, eventos, i)
                 i += 4
                 continue
 
             char = texto[i]
-            self._processar_caractere(char, context, eventos)
+            self._processar_caractere(char, context, eventos, i)
             context.tempo_evento += 1.0
             i += 1
 
@@ -60,9 +60,11 @@ class TextParser:
             pass
 
         return [
-            EventoTempo(tempo=context.tempo_evento, bpm=context.bpm),
+            EventoTempo(tempo=context.tempo_evento, bpm=context.bpm, source_index=0),
             EventoInstrumento(
-                tempo=context.tempo_evento, instrument_id=context.instrument_id
+                tempo=context.tempo_evento,
+                instrument_id=context.instrument_id,
+                source_index=0,
             ),
         ]
 
@@ -71,38 +73,43 @@ class TextParser:
         char: str,
         context: ParsingContext,
         eventos: list[EventoMusical],
+        index: int,
     ) -> None:
         """Processar um único caractere e atualizar estado/eventos."""
         char_lower = char.lower()
 
         if char_lower in 'abcdefgh':
-            self._tratar_nota(char, context, eventos)
+            self._tratar_nota(char, context, eventos, index)
         elif char == ' ':
             self._tratar_volume(context)
         elif char in '+-':
             self._tratar_oitava(char, context)
         elif char_lower in 'oiu':
-            self._tratar_vogal(context, eventos)
+            self._tratar_vogal(context, eventos, index)
         elif char == '?':
-            self._tratar_aleatorio(context, eventos)
+            self._tratar_aleatorio(context, eventos, index)
         elif char == '\n':
-            self._tratar_troca_instrumento(context, eventos)
+            self._tratar_troca_instrumento(context, eventos, index)
         elif char == ';':
-            self._tratar_pausa(context, eventos)
+            self._tratar_pausa(context, eventos, index)
 
     def _tratar_bpm_mais(
         self,
         context: ParsingContext,
         eventos: list[EventoMusical],
+        index: int,
     ) -> None:
         context.bpm += 80
-        eventos.append(EventoTempo(tempo=context.tempo_evento, bpm=context.bpm))
+        eventos.append(
+            EventoTempo(tempo=context.tempo_evento, bpm=context.bpm, source_index=index)
+        )
 
     def _tratar_nota(
         self,
         char: str,
         context: ParsingContext,
         eventos: list[EventoMusical],
+        index: int,
     ) -> None:
         nota_midi = self._get_nota_midi(char, context.octave)
         if 0 <= nota_midi <= MAX_MIDI_VALUE:
@@ -112,11 +119,12 @@ class TextParser:
                     pitch=nota_midi,
                     volume=context.volume,
                     duracao=1.0,
+                    source_index=index,
                 ),
             )
             context.last_note_midi = nota_midi
         else:
-            self._tratar_pausa(context, eventos)
+            self._tratar_pausa(context, eventos, index)
 
     def _tratar_volume(self, context: ParsingContext) -> None:
         context.volume = min(context.volume * 2, MAX_MIDI_VALUE)
@@ -133,6 +141,7 @@ class TextParser:
         self,
         context: ParsingContext,
         eventos: list[EventoMusical],
+        index: int,
     ) -> None:
         if context.last_note_midi != -1:
             eventos.append(
@@ -141,6 +150,7 @@ class TextParser:
                     pitch=context.last_note_midi,
                     volume=context.volume,
                     duracao=1.0,
+                    source_index=index,
                 ),
             )
         else:
@@ -152,6 +162,7 @@ class TextParser:
                     pitch=nota_telefone,
                     volume=100,
                     duracao=1.0,
+                    source_index=index,
                 ),
             )
             context.last_note_midi = -1
@@ -160,14 +171,16 @@ class TextParser:
         self,
         context: ParsingContext,
         eventos: list[EventoMusical],
+        index: int,
     ) -> None:
         nota_rand_char = random.choice('abcdefgh')
-        self._tratar_nota(nota_rand_char, context, eventos)
+        self._tratar_nota(nota_rand_char, context, eventos, index)
 
     def _tratar_troca_instrumento(
         self,
         context: ParsingContext,
         eventos: list[EventoMusical],
+        index: int,
     ) -> None:
         ids_instrumentos = [id_inst for id_inst, _ in INSTRUMENTOS]
         try:
@@ -181,6 +194,7 @@ class TextParser:
             EventoInstrumento(
                 tempo=context.tempo_evento,
                 instrument_id=context.instrument_id,
+                source_index=index,
             ),
         )
         context.last_note_midi = -1
@@ -189,6 +203,9 @@ class TextParser:
         self,
         context: ParsingContext,
         eventos: list[EventoMusical],
+        index: int,
     ) -> None:
-        eventos.append(EventoPausa(tempo=context.tempo_evento, duracao=1.0))
+        eventos.append(
+            EventoPausa(tempo=context.tempo_evento, duracao=1.0, source_index=index)
+        )
         context.last_note_midi = -1

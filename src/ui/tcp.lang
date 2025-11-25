@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<language id="tcp" _name="TCP Music" version="2.0" _section="Source">
+  <metadata>
+    <property name="mimetypes">text/x-tcp</property>
+    <property name="globs">*.txt</property>
+  </metadata>
+
+  <styles>
+    <style id="note" _name="Note" map-to="def:string"/>
+    <style id="bpm" _name="BPM Change" map-to="def:keyword"/>
+    <style id="octave" _name="Octave Change" map-to="def:operator"/>
+    <style id="volume" _name="Volume Change" map-to="def:type"/>
+    <style id="instrument" _name="Instrument Change" map-to="def:identifier"/>
+    <style id="vowel" _name="Vowel" map-to="def:constant"/>
+    <style id="random" _name="Random Note" map-to="def:special-char"/>
+    <style id="pause" _name="Pause" map-to="def:comment"/>
+  </styles>
+
+  <definitions>
+    <context id="tcp">
+      <include>
+        <context id="bpm-plus" style-ref="bpm">
+          <match case-sensitive="false">BPM\+</match>
+        </context>
+
+        <context id="notes" style-ref="note">
+          <match case-sensitive="false">[A-G]</match>
+        </context>
+
+        <context id="octave-plus" style-ref="octave">
+          <match>\+</match>
+        </context>
+        
+        <context id="octave-minus" style-ref="octave">
+          <match>-</match>
+        </context>
+
+        <context id="volume-space" style-ref="volume">
+          <match> </match>
+        </context>
+
+        <context id="instrument-newline" style-ref="instrument">
+          <match>\n</match>
+        </context>
+
+        <context id="vowels" style-ref="vowel">
+          <match case-sensitive="false">[OUI]</match>
+        </context>
+
+        <context id="random-q" style-ref="random">
+          <match>\?</match>
+        </context>
+        
+        <context id="pause-semi" style-ref="pause">
+          <match>;</match>
+        </context>
+      </include>
+    </context>
+  </definitions>
+</language>
