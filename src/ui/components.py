@@ -200,16 +200,16 @@ class ConfigPanel(Adw.PreferencesGroup):
     def _on_inst_list_bind(
         self, _factory: Gtk.SignalListItemFactory, item: Gtk.ListItem
     ) -> None:
-        label = item.get_child()
+        label: Gtk.Widget | None = item.get_child()
         if isinstance(label, Gtk.Label):
-            obj = item.get_item()
-            if obj:
-                label.set_label(obj.get_string())
+            obj: GObject.Object | None = item.get_item()
+            if isinstance(obj, Gtk.StringObject):
+                label.set_label(str=obj.get_string())
 
     def _on_inst_list_activate(self, _listview: Gtk.ListView, position: int) -> None:
         obj: GObject.Object | None = self.model_filter.get_item(position)
-        if obj:
-            name = obj.get_string()
+        if isinstance(obj, Gtk.StringObject):
+            name: str = obj.get_string()
             self._select_instrument_by_name(name)
             self.popover_inst.popdown()
 
@@ -239,9 +239,7 @@ class ConfigPanel(Adw.PreferencesGroup):
         filter_sf2.add_pattern(pattern='*.sf2')
         dialog.add_filter(filter=filter_sf2)
 
-        _ = dialog.connect(
-            detailed_signal='response', handler=self._on_soundfont_response
-        )
+        _ = dialog.connect('response', self._on_soundfont_response)
         dialog.show()
 
     def _on_soundfont_response(
@@ -279,6 +277,10 @@ class TextEditor(Adw.PreferencesGroup):
         self.buffer: GtkSource.Buffer = GtkSource.Buffer()
         self._setup_language()
 
+        self.style_manager: Adw.StyleManager = Adw.StyleManager.get_default()
+        _ = self.style_manager.connect('notify::dark', self._on_theme_changed)
+        self._update_theme()
+
         self.textview: GtkSource.View = GtkSource.View.new_with_buffer(self.buffer)
         self.textview.set_wrap_mode(wrap_mode=Gtk.WrapMode.WORD_CHAR)
         self.textview.set_monospace(monospace=True)
@@ -287,8 +289,6 @@ class TextEditor(Adw.PreferencesGroup):
         self.textview.set_right_margin(right_margin=6)
         self.textview.set_top_margin(top_margin=6)
         self.textview.set_bottom_margin(bottom_margin=6)
-        self.textview.set_show_line_numbers(show=True)
-        self.textview.set_highlight_current_line(highlight=True)
 
         self.text_buffer: Gtk.TextBuffer = self.buffer
         self.text_buffer.set_text(text='CDEFGABH+CDEF\n\n-CDEF\n\n')
@@ -321,8 +321,24 @@ class TextEditor(Adw.PreferencesGroup):
         if lang:
             self.buffer.set_language(language=lang)
 
+    def _on_theme_changed(
+        self, _manager: Adw.StyleManager, _pspec: GObject.ParamSpec
+    ) -> None:
+        """Chamado quando o tema do sistema muda (claro/escuro)."""
+        self._update_theme()
+
+    def _update_theme(self) -> None:
+        """Aplica o esquema de cores correto baseado no tema atual."""
         sm: GtkSource.StyleSchemeManager = GtkSource.StyleSchemeManager.get_default()
-        scheme: GtkSource.StyleScheme | None = sm.get_scheme(scheme_id='classic')
+        is_dark: bool = self.style_manager.get_dark()
+
+        scheme_id = 'Adwaita-dark' if is_dark else 'Adwaita'
+        scheme = sm.get_scheme(scheme_id)
+
+        if not scheme:
+            scheme_id = 'oblivion' if is_dark else 'classic'
+            scheme = sm.get_scheme(scheme_id)
+
         if scheme:
             self.buffer.set_style_scheme(scheme)
 

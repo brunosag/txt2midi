@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Final
 
 # Caminho padrão para o SoundFont
-DEFAULT_SOUNDFONT: Final[Path] = Path('FluidR3_GM.sf2')
+DEFAULT_SOUNDFONT: Final[Path] = Path('soundfont/SGM-V2.01.sf2')
 
 # Valor máximo para dados MIDI (notas, volume, etc.)
 MAX_MIDI_VALUE: Final[int] = 127

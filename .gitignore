@@ -12,3 +12,11 @@ wheels/
 
 # SoundFont files
 *.sf2
+soundfont/
+
+# Input & output files
+input/
+output/
+*.mid
+*.midi
+*.txt

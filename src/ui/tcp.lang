@@ -6,11 +6,11 @@
   </metadata>
 
   <styles>
-    <style id="command" _name="Command" map-to="def:keyword"/>
-    <style id="note" _name="Note" map-to="def:string"/>
-    <style id="number" _name="Number" map-to="def:constant"/>
-    <style id="modifier" _name="Modifier" map-to="def:operator"/>
-    <style id="comment" _name="Comment" map-to="def:comment"/>
+    <style id="command" _name="Command" map-to="def:keyword" />
+    <style id="note" _name="Note" map-to="def:string" />
+    <style id="number" _name="Number" map-to="def:constant" />
+    <style id="modifier" _name="Modifier" map-to="def:operator" />
+    <style id="comment" _name="Comment" map-to="def:comment" />
   </styles>
 
   <definitions>
@@ -21,15 +21,15 @@
         </context>
 
         <context id="octave-shift" style-ref="command">
-           <match>[&gt;&lt;]</match>
+          <match>[&gt;&lt;]+</match>
         </context>
 
         <context id="notes" style-ref="note">
-          <match case-sensitive="false">[A-G][#\+\-b]?</match>
+          <match case-sensitive="false">([A-G][#\+\-b]?)+</match>
         </context>
-        
+
         <context id="rests" style-ref="note">
-          <match case-sensitive="false">[RP]</match>
+          <match case-sensitive="false">[RP]+</match>
         </context>
 
         <context id="values" style-ref="number">
@@ -39,7 +39,6 @@
         <context id="dots" style-ref="modifier">
           <match>\.</match>
         </context>
-
       </include>
     </context>
   </definitions>
