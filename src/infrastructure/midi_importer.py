@@ -1,9 +1,14 @@
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final, NamedTuple
 
-import mido
+import mido  # pyright: ignore[reportMissingTypeStubs]
 
 from config import NOTAS_MIDI_BASE
+
+MIN_DURATION_THRESHOLD: Final[float] = 0.01
+DURATION_EPSILON: Final[float] = 1e-5
+DEFAULT_BPM: Final[int] = 120
 
 
 @dataclass
@@ -14,157 +19,228 @@ class NoteEvent:
     velocity: int
     instrument: int
 
+    @property
+    def end_ticks(self) -> int:
+        return self.start_ticks + self.duration_ticks
+
+
+class ConversionResult(NamedTuple):
+    text: str
+    initial_instrument: int
+    initial_velocity: int
+    initial_bpm: int
+
 
 class MIDIImporter:
-    """Converts MIDI files into the application's text format."""
+    """Converts MIDI files into the application's text format, enforcing monophony."""
 
-    def load(self, filepath: Path) -> str:
-        mid = mido.MidiFile(filepath)
+    def __init__(self) -> None:
+        self._pitch_map: dict[int, str] = {
+            v % 12: k for k, v in NOTAS_MIDI_BASE.items()
+        }
+        self._duration_lookup: list[tuple[float, int, int]] = (
+            self._build_duration_table()
+        )
+
+    def load(self, filepath: Path) -> ConversionResult:
+        mid: mido.MidiFile = mido.MidiFile(filename=filepath)
         ticks_per_beat = mid.ticks_per_beat
 
-        # 1. Read all notes from all tracks
-        raw_events = []
+        raw_events: list[NoteEvent] = self._parse_track_events(mid)
+        processed_events: list[NoteEvent] = self._resolve_monophony(events=raw_events)
+
+        initial_bpm: int = self._get_initial_bpm(mid)
+
+        if not processed_events:
+            return ConversionResult(
+                text='',
+                initial_instrument=0,
+                initial_velocity=100,
+                initial_bpm=initial_bpm,
+            )
+
+        initial_inst: int = processed_events[0].instrument
+        initial_vol: int = processed_events[0].velocity
+
+        text_output: str = self._transpile_to_text(
+            events=processed_events,
+            tpb=ticks_per_beat,
+            init_inst=initial_inst,
+            init_vol=initial_vol,
+        )
+
+        return ConversionResult(
+            text=text_output,
+            initial_instrument=initial_inst,
+            initial_velocity=initial_vol,
+            initial_bpm=initial_bpm,
+        )
+
+    def _get_initial_bpm(self, mid: mido.MidiFile) -> int:
+        """Scan tracks for the first `set_tempo` message."""
         for track in mid.tracks:
-            current_ticks = 0
-            current_instrument = 0
-            active_notes = {}  # pitch -> (start_ticks, velocity, instrument)
+            for msg in track:
+                if msg.type == 'set_tempo':
+                    return int(mido.tempo2bpm(msg.tempo))
+        return DEFAULT_BPM
+
+    def _parse_track_events(self, mid: mido.MidiFile) -> list[NoteEvent]:
+        """Extract linear events from all tracks."""
+        events = []
+
+        for track in mid.tracks:
+            curr_ticks = 0
+            curr_inst = 0
+            active_notes: dict[int, tuple[int, int, int]] = {}
 
             for msg in track:
-                current_ticks += msg.time
+                curr_ticks += msg.time
 
                 if msg.type == 'program_change':
-                    current_instrument = msg.program
+                    curr_inst = msg.program
+                    continue
 
-                elif msg.type == 'note_on' and msg.velocity > 0:
+                is_note_on = msg.type == 'note_on' and msg.velocity > 0
+                is_note_off = msg.type == 'note_off' or (
+                    msg.type == 'note_on' and msg.velocity == 0
+                )
+
+                if is_note_on:
                     if msg.note not in active_notes:
-                        active_notes[msg.note] = (
-                            current_ticks,
-                            msg.velocity,
-                            current_instrument,
+                        active_notes[msg.note] = (curr_ticks, msg.velocity, curr_inst)
+
+                elif is_note_off and msg.note in active_notes:
+                    start, vel, inst = active_notes.pop(msg.note)
+                    duration = curr_ticks - start
+                    if duration > 0:
+                        events.append(
+                            NoteEvent(
+                                start_ticks=start,
+                                duration_ticks=duration,
+                                pitch=msg.note,
+                                velocity=vel,
+                                instrument=inst,
+                            )
                         )
 
-                elif (msg.type == 'note_off') or (
-                    msg.type == 'note_on' and msg.velocity == 0
-                ):
-                    if msg.note in active_notes:
-                        start_tick, vel, instr = active_notes.pop(msg.note)
-                        duration = current_ticks - start_tick
-                        if duration > 0:
-                            raw_events.append(
-                                NoteEvent(start_tick, duration, msg.note, vel, instr)
-                            )
+        return events
 
-        # 2. Sort by Time ASC, then Pitch DESC (Melody priority)
-        raw_events.sort(key=lambda x: (x.start_ticks, -x.pitch))
+    def _resolve_monophony(self, events: list[NoteEvent]) -> list[NoteEvent]:
+        """Sorts events and handles overlaps.
 
-        # 3. Handle Polyphony (Truncation)
-        processed_events = []
-        if raw_events:
-            unique_events = []
-            last_start = -1
-            # A. Filter simultaneous chords (keep highest)
-            for note in raw_events:
-                if note.start_ticks > last_start:
-                    unique_events.append(note)
-                    last_start = note.start_ticks
+        Strategy: Melody priority (Highest Pitch) -> Truncate overlaps.
+        """
+        events.sort(key=lambda x: (x.start_ticks, -x.pitch))
 
-            # B. Truncate overlaps
-            for i in range(len(unique_events) - 1):
-                curr = unique_events[i]
+        if not events:
+            return []
+
+        unique_events = []
+        last_start = -1
+
+        for note in events:
+            if note.start_ticks > last_start:
+                unique_events.append(note)
+                last_start: int = note.start_ticks
+
+        processed = []
+        count: int = len(unique_events)
+
+        for i in range(count):
+            curr = unique_events[i]
+
+            if i < count - 1:
                 nxt = unique_events[i + 1]
                 delta = nxt.start_ticks - curr.start_ticks
                 curr.duration_ticks = min(curr.duration_ticks, delta)
-                processed_events.append(curr)
 
-            processed_events.append(unique_events[-1])
+            processed.append(curr)
 
-        # 4. Convert to Text
-        current_ticks = 0
-        current_octave = 5
-        current_vol = -1
-        current_inst = -1
-        output_parts = []
+        return processed
 
-        # UPDATED: Filter 'H' out of the map so we generate A# instead
-        base_pitch_map = {v % 12: k for k, v in NOTAS_MIDI_BASE.items() if k != 'H'}
+    def _transpile_to_text(
+        self, events: list[NoteEvent], tpb: int, init_inst: int, init_vol: int
+    ) -> str:
+        """Convert cleaned events to the domain-specific string format."""
+        parts = []
+        curr_ticks = 0
+        curr_octave = 5
+        curr_vol: int = init_vol
+        curr_inst: int = init_inst
 
-        for note in processed_events:
-            # Rest logic
-            gap_ticks = note.start_ticks - current_ticks
-            if gap_ticks > 0:
-                gap_beats = gap_ticks / ticks_per_beat
-                rest_str = self._format_duration('R', gap_beats)
+        for note in events:
+            gap: int = note.start_ticks - curr_ticks
+            if gap > 0:
+                rest_str: str = self._format_duration(char='R', beats=gap / tpb)
                 if rest_str:
-                    output_parts.append(rest_str)
+                    parts.append(rest_str)
 
-            current_ticks = note.start_ticks
+            curr_ticks: int = note.start_ticks
 
-            # Instrument
-            if note.instrument != current_inst:
-                output_parts.append(f'I{note.instrument}')
-                current_inst = note.instrument
+            if note.instrument != curr_inst:
+                parts.append(f'I{note.instrument}')
+                curr_inst: int = note.instrument
 
-            # Volume
-            if note.velocity != current_vol:
-                output_parts.append(f'V{note.velocity}')
-                current_vol = note.velocity
+            if note.velocity != curr_vol:
+                parts.append(f'V{note.velocity}')
+                curr_vol: int = note.velocity
 
-            # Octave
-            target_octave = note.pitch // 12
-            if target_octave != current_octave:
-                diff = target_octave - current_octave
-                if diff == 1:
-                    output_parts.append('>')
-                elif diff == -1:
-                    output_parts.append('<')
-                else:
-                    output_parts.append(f'O{target_octave}')
-                current_octave = target_octave
+            target_octave: int = note.pitch // 12
+            diff: int = target_octave - curr_octave
+            if diff == 1:
+                parts.append('>')
+            elif diff == -1:
+                parts.append('<')
+            elif diff != 0:
+                parts.append(f'O{target_octave}')
+            curr_octave: int = target_octave
 
-            # Note Name
-            pitch_class = note.pitch % 12
-            note_char = base_pitch_map.get(pitch_class)
+            pitch_class: int = note.pitch % 12
+            char: str | None = self._pitch_map.get(pitch_class)
 
-            if not note_char:
-                # Fallback to sharp notation (e.g. A# for H/Bb)
-                prev_pitch = (pitch_class - 1) % 12
-                if prev_pitch in base_pitch_map:
-                    note_char = base_pitch_map[prev_pitch] + '#'
-                else:
-                    note_char = 'C'
+            if not char:
+                prev_pitch: int = (pitch_class - 1) % 12
+                base: str = self._pitch_map.get(prev_pitch, 'C')
+                char = f'{base}#'
 
-            # Duration
-            beats = note.duration_ticks / ticks_per_beat
-            note_str = self._format_duration(note_char, beats)
-            output_parts.append(note_str)
+            duration_str: str = self._format_duration(
+                char, beats=note.duration_ticks / tpb
+            )
+            parts.append(duration_str)
 
-            current_ticks += note.duration_ticks
+            curr_ticks += note.duration_ticks
 
-        return ' '.join(output_parts)
+        return ' '.join(parts)
 
-    def _format_duration(self, char: str, beats: float) -> str:
-        """Converts beat duration to syntax (C4, C4., etc)."""
-        if beats <= 0.01:
-            return ''
-
-        target_beats = beats
-        best_str = ''
-        min_error = float('inf')
-        base_lengths = [1, 2, 4, 8, 16, 32, 64]
+    def _build_duration_table(self) -> list[tuple[float, int, int]]:
+        """Create a lookup table for standard note durations."""
+        table = []
+        base_lengths: list[int] = [1, 2, 4, 8, 16, 32, 64]
 
         for length in base_lengths:
-            base_dur = 4.0 / length
-            for dots in range(3):  # 0, 1, or 2 dots
-                dur = base_dur
-                adder = base_dur * 0.5
-                for _ in range(dots):
-                    dur += adder
-                    adder *= 0.5
+            base_dur: float = 4.0 / length
+            table.append((base_dur, length, 0))
+            table.append((base_dur * 1.5, length, 1))
+            table.append((base_dur * 1.75, length, 2))
 
-                error = abs(dur - target_beats)
-                if error < min_error:
-                    min_error = error
-                    dot_str = '.' * dots
-                    best_str = f'{char}{length}{dot_str}'
+        return table
 
-        return best_str
+    def _format_duration(self, char: str, beats: float) -> str:
+        """Find closest standard duration using the lookup table."""
+        if beats <= MIN_DURATION_THRESHOLD:
+            return ''
+
+        best_match: tuple[int, int] = (0, 0)
+        min_error: float = float('inf')
+
+        for dur, length, dots in self._duration_lookup:
+            error: float = abs(dur - beats)
+            if error < min_error:
+                min_error = error
+                best_match = (length, dots)
+
+                if error < DURATION_EPSILON:
+                    break
+
+        length, dots = best_match
+        return f'{char}{length}{"." * dots}'

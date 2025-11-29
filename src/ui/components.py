@@ -262,6 +262,26 @@ class ConfigPanel(Adw.PreferencesGroup):
             instrument_id=self.current_instrument_id,
         )
 
+    def set_volume(self, volume: int) -> None:
+        """Define o valor do spin button de volume."""
+        adj: Gtk.Adjustment = self.spin_vol.get_adjustment()
+        safe_vol: float = max(adj.get_lower(), min(volume, adj.get_upper()))
+        self.spin_vol.set_value(value=safe_vol)
+
+    def set_bpm(self, bpm: int) -> None:
+        """Define o valor do spin button de BPM."""
+        adj: Gtk.Adjustment = self.spin_bpm.get_adjustment()
+        safe_bpm: float = max(adj.get_lower(), min(bpm, adj.get_upper()))
+        self.spin_bpm.set_value(value=safe_bpm)
+
+    def set_instrument(self, instrument_id: int) -> None:
+        """Define o instrumento selecionado pelo ID."""
+        nome_instrumento: str | None = next(
+            (nome for _id, nome in INSTRUMENTOS if _id == instrument_id), None
+        )
+        if nome_instrumento:
+            self._select_instrument_by_name(name=nome_instrumento)
+
     def get_soundfont_path(self) -> Path:
         return self.current_soundfont_path
 

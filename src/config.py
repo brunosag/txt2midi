@@ -4,9 +4,6 @@ from typing import Final
 # Caminho padrão para o SoundFont
 DEFAULT_SOUNDFONT: Final[Path] = Path('soundfont/SGM-V2.01.sf2')
 
-# Valor máximo para dados MIDI (notas, volume, etc.)
-MAX_MIDI_VALUE: Final[int] = 127
-
 # Mapeamento de notas base (Oitava 5) para números MIDI
 NOTAS_MIDI_BASE: Final[dict[str, int]] = {
     'C': 60,
