@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<language id="standard" _name="TCP Standard" version="2.0" _section="Source">
+	<metadata>
+		<property name="mimetypes">text/x-tcp-standard</property>
+		<property name="globs">*.txt</property>
+	</metadata>
+
+	<styles>
+		<style id="keyword" _name="Keyword" map-to="def:keyword" />
+		<style id="note" _name="Note" map-to="def:string" />
+		<style id="vowel" _name="Vowel" map-to="def:function" />
+		<style id="operator" _name="Operator" map-to="def:operator" />
+		<style id="comment" _name="Comment" map-to="def:comment" />
+	</styles>
+
+	<definitions>
+		<context id="standard">
+			<include>
+				<context id="bpm-plus" style-ref="keyword">
+					<match>BPM\+</match>
+				</context>
+
+				<context id="notes" style-ref="note">
+					<match case-sensitive="false">[A-GH]</match>
+				</context>
+
+				<context id="vowels" style-ref="vowel">
+					<match case-sensitive="false">[OUI]</match>
+				</context>
+
+				<context id="octave-shift" style-ref="operator">
+					<match>[\+\-]</match>
+				</context>
+
+				<context id="random" style-ref="keyword">
+					<match>\?</match>
+				</context>
+
+				<context id="rest" style-ref="comment">
+					<match>;</match>
+				</context>
+			</include>
+		</context>
+	</definitions>
+</language>

@@ -1,0 +1,24 @@
+using Gtk 4.0;
+using Adw 1;
+using GtkSource 5;
+
+template $TextEditor : Adw.PreferencesGroup {
+  title: _("Texto de entrada");
+  description: _("Insira o texto para geração da música.");
+
+  Gtk.Frame {
+    Gtk.ScrolledWindow {
+      min-content-height: 150;
+      
+      GtkSource.View textview {
+        monospace: true;
+        wrap-mode: word_char;
+        vexpand: true;
+        left-margin: 6;
+        right-margin: 6;
+        top-margin: 6;
+        bottom-margin: 6;
+      }
+    }
+  }
+}

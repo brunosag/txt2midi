@@ -17,116 +17,41 @@ from gi.repository import (  # noqa: E402
     GtkSource,  # pyright: ignore[reportMissingModuleSource]
 )
 
+GObject.type_ensure(GtkSource.View)
 
+
+@Gtk.Template(filename='src/ui/blueprints/config_panel.ui')
 class ConfigPanel(Adw.PreferencesGroup):
-    """Painel de configuração (BPM, Volume, Oitava, Instrumento)."""
+    __gtype_name__ = 'ConfigPanel'
+
+    spin_bpm = Gtk.Template.Child()
+    spin_vol = Gtk.Template.Child()
+    spin_oitava = Gtk.Template.Child()
+    row_inst = Gtk.Template.Child()
+    box_inst_wrapper = Gtk.Template.Child()
+    lbl_inst_selected = Gtk.Template.Child()
+    popover_inst = Gtk.Template.Child()
+    entry_search = Gtk.Template.Child()
+    stack_inst = Gtk.Template.Child()
+    list_inst = Gtk.Template.Child()
+    soundfont_row = Gtk.Template.Child()
+    btn_soundfont = Gtk.Template.Child()
 
     def __init__(self) -> None:
         super().__init__()
-        self.set_title(title='Parâmetros iniciais')
-
-        adj_bpm: Gtk.Adjustment = Gtk.Adjustment(
-            value=120,
-            lower=20,
-            upper=400,
-            step_increment=5,
-            page_increment=0,
-            page_size=0,
-        )
-        self.spin_bpm: Adw.SpinRow = Adw.SpinRow()
-        self.spin_bpm.set_title(title='BPM (batidas por minuto)')
-        self.spin_bpm.set_adjustment(adjustment=adj_bpm)
-        self.spin_bpm.set_digits(digits=0)
-        self.add(child=self.spin_bpm)
-
-        adj_vol: Gtk.Adjustment = Gtk.Adjustment(
-            value=100,
-            lower=0,
-            upper=127,
-            step_increment=1,
-            page_increment=0,
-            page_size=0,
-        )
-        self.spin_vol: Adw.SpinRow = Adw.SpinRow()
-        self.spin_vol.set_title(title='Volume inicial')
-        self.spin_vol.set_adjustment(adjustment=adj_vol)
-        self.spin_vol.set_digits(digits=0)
-        self.add(child=self.spin_vol)
-
-        adj_oitava: Gtk.Adjustment = Gtk.Adjustment(
-            value=5,
-            lower=1,
-            upper=10,
-            step_increment=1,
-            page_increment=0,
-            page_size=0,
-        )
-        self.spin_oitava: Adw.SpinRow = Adw.SpinRow()
-        self.spin_oitava.set_title(title='Oitava inicial')
-        self.spin_oitava.set_adjustment(adjustment=adj_oitava)
-        self.spin_oitava.set_digits(digits=0)
-        self.add(child=self.spin_oitava)
-
-        self.row_inst: Adw.ActionRow = Adw.ActionRow()
-        self.row_inst.set_title(title='Instrumento inicial')
-        self.row_inst.set_activatable(activatable=True)
-        _ = self.row_inst.connect('activated', self._on_open_inst_popover)
-        self.box_inst_wrapper: Gtk.Box = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL, spacing=6
-        )
-        self.box_inst_wrapper.set_valign(align=Gtk.Align.CENTER)
-
-        self.lbl_inst_selected: Gtk.Label = Gtk.Label()
-        self.box_inst_wrapper.append(child=self.lbl_inst_selected)
-
-        icon_arrow: Gtk.Image = Gtk.Image.new_from_icon_name(
-            icon_name='pan-down-symbolic'
-        )
-        self.box_inst_wrapper.append(child=icon_arrow)
-
-        self.row_inst.add_suffix(widget=self.box_inst_wrapper)
-        self.add(child=self.row_inst)
-
-        self._build_instrument_popover()
 
         self.current_instrument_id: int = 0
-        self._select_instrument_by_name(name=INSTRUMENTOS[0][1])
-
-        self.soundfont_row: Adw.ActionRow = Adw.ActionRow()
-        self.soundfont_row.set_title(title='SoundFont')
-        self.soundfont_row.set_subtitle(subtitle=str(DEFAULT_SOUNDFONT))
-
-        self.btn_soundfont: Gtk.Button = Gtk.Button(label='Selecionar')
-        self.btn_soundfont.set_valign(align=Gtk.Align.CENTER)
-        _ = self.btn_soundfont.connect('clicked', self._on_select_soundfont)
-
-        self.soundfont_row.add_suffix(widget=self.btn_soundfont)
-        self.add(child=self.soundfont_row)
-
         self.current_soundfont_path: Path = DEFAULT_SOUNDFONT
 
-    def _build_instrument_popover(self) -> None:
-        self.popover_inst: Gtk.Popover = Gtk.Popover()
-        self.popover_inst.set_parent(parent=self.box_inst_wrapper)
-        self.popover_inst.add_css_class(css_class='menu')
-        self.popover_inst.set_autohide(autohide=True)
+        self.soundfont_row.set_subtitle(subtitle=str(DEFAULT_SOUNDFONT))
+        self._setup_instrument_list()
+        self._select_instrument_by_name(name=INSTRUMENTOS[0][1])
 
-        box: Gtk.Box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.popover_inst.set_child(child=box)
+        self.row_inst.connect('activated', self._on_open_inst_popover)
+        self.btn_soundfont.connect('clicked', self._on_select_soundfont)
+        self.entry_search.connect('search-changed', self._on_inst_search_changed)
 
-        self.entry_search: Gtk.SearchEntry = Gtk.SearchEntry()
-        self.entry_search.set_placeholder_text(text='Buscar...')
-        self.entry_search.set_search_delay(delay=0)
-        self.entry_search.set_margin_top(margin=6)
-        self.entry_search.set_margin_bottom(margin=6)
-        self.entry_search.set_margin_start(margin=6)
-        self.entry_search.set_margin_end(margin=6)
-        box.append(child=self.entry_search)
-
-        self.stack_inst: Gtk.Stack = Gtk.Stack()
-        self.stack_inst.set_transition_type(transition=Gtk.StackTransitionType.NONE)
-        box.append(child=self.stack_inst)
-
+    def _setup_instrument_list(self) -> None:
         items: list[str] = [nome for _id, nome in INSTRUMENTOS]
         self.model_strings: Gtk.StringList = Gtk.StringList.new(strings=items)
 
@@ -152,31 +77,13 @@ class ConfigPanel(Adw.PreferencesGroup):
         _ = factory.connect('setup', self._on_inst_list_setup)
         _ = factory.connect('bind', self._on_inst_list_bind)
 
-        self.list_inst: Gtk.ListView = Gtk.ListView(
-            model=self.model_selection, factory=factory
-        )
-        self.list_inst.set_single_click_activate(single_click_activate=True)
-        _ = self.list_inst.connect('activate', self._on_inst_list_activate)
-
-        scrolled: Gtk.ScrolledWindow = Gtk.ScrolledWindow()
-        scrolled.set_min_content_width(width=200)
-        scrolled.set_max_content_height(height=300)
-        scrolled.set_propagate_natural_height(propagate=True)
-        scrolled.set_propagate_natural_width(propagate=True)
-        scrolled.set_child(child=self.list_inst)
-
-        _ = self.stack_inst.add_named(child=scrolled, name='list')
-
-        lbl_empty: Gtk.Label = Gtk.Label(label='Nenhum resultado.')
-        lbl_empty.add_css_class(css_class='dim-label')
-
-        _ = self.stack_inst.add_named(child=lbl_empty, name='empty')
-        _ = self.entry_search.connect('search-changed', self._on_inst_search_changed)
+        self.list_inst.set_model(model=self.model_selection)
+        self.list_inst.set_factory(factory=factory)
+        self.list_inst.connect('activate', self._on_inst_list_activate)
 
     def _on_inst_filter_changed(
         self, model: Gtk.FilterListModel, _pos: int, _rm: int, _add: int
     ) -> None:
-        """Alterna a stack dependendo se há itens visíveis no filtro."""
         if model.get_n_items() == 0:
             self.stack_inst.set_visible_child_name(name='empty')
         else:
@@ -263,19 +170,16 @@ class ConfigPanel(Adw.PreferencesGroup):
         )
 
     def set_volume(self, volume: int) -> None:
-        """Define o valor do spin button de volume."""
         adj: Gtk.Adjustment = self.spin_vol.get_adjustment()
         safe_vol: float = max(adj.get_lower(), min(volume, adj.get_upper()))
         self.spin_vol.set_value(value=safe_vol)
 
     def set_bpm(self, bpm: int) -> None:
-        """Define o valor do spin button de BPM."""
         adj: Gtk.Adjustment = self.spin_bpm.get_adjustment()
         safe_bpm: float = max(adj.get_lower(), min(bpm, adj.get_upper()))
         self.spin_bpm.set_value(value=safe_bpm)
 
     def set_instrument(self, instrument_id: int) -> None:
-        """Define o instrumento selecionado pelo ID."""
         nome_instrumento: str | None = next(
             (nome for _id, nome in INSTRUMENTOS if _id == instrument_id), None
         )
@@ -286,54 +190,31 @@ class ConfigPanel(Adw.PreferencesGroup):
         return self.current_soundfont_path
 
 
+@Gtk.Template(filename='src/ui/blueprints/text_editor.ui')
 class TextEditor(Adw.PreferencesGroup):
-    """Editor de texto para entrada musical."""
+    __gtype_name__ = 'TextEditor'
+
+    textview = Gtk.Template.Child()
 
     def __init__(self) -> None:
         super().__init__()
-        self.set_title(title='Texto de entrada')
-        self.set_description(description='Insira o texto para geração da música.')
 
-        self.buffer: GtkSource.Buffer = GtkSource.Buffer()
+        self.buffer: GtkSource.Buffer = self.textview.get_buffer()
+        self.highlight_tag: Gtk.TextTag = self.buffer.create_tag(
+            tag_name='highlight', background='yellow', foreground='black'
+        )
 
         self.style_manager: Adw.StyleManager = Adw.StyleManager.get_default()
         _ = self.style_manager.connect('notify::dark', self._on_theme_changed)
         self._update_theme()
 
-        self.textview: GtkSource.View = GtkSource.View.new_with_buffer(self.buffer)
-        self.textview.set_wrap_mode(wrap_mode=Gtk.WrapMode.WORD_CHAR)
-        self.textview.set_monospace(monospace=True)
-        self.textview.set_vexpand(expand=True)
-        self.textview.set_left_margin(left_margin=6)
-        self.textview.set_right_margin(right_margin=6)
-        self.textview.set_top_margin(top_margin=6)
-        self.textview.set_bottom_margin(bottom_margin=6)
-
-        self.text_buffer: Gtk.TextBuffer = self.buffer
-
-        scrolled_window: Gtk.ScrolledWindow = Gtk.ScrolledWindow()
-        scrolled_window.set_policy(
-            hscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
-            vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
-        )
-        scrolled_window.set_min_content_height(height=150)
-        scrolled_window.set_child(child=self.textview)
-
-        text_frame: Gtk.Frame = Gtk.Frame()
-        text_frame.set_child(child=scrolled_window)
-        self.add(child=text_frame)
-
-        self.highlight_tag: Gtk.TextTag = self.buffer.create_tag(
-            tag_name='highlight', background='yellow', foreground='black'
-        )
-
     def set_language_id(self, lang_id: str) -> None:
-        """Dynamically set the syntax highlighting language."""
         lm: GtkSource.LanguageManager = GtkSource.LanguageManager.get_default()
         search_path: list[str] = lm.get_search_path()
-        current_dir: str = str(Path(__file__).parent)
-        if current_dir not in search_path:
-            search_path.append(current_dir)
+        lang_dir: str = str(Path(__file__).parent / 'lang')
+
+        if lang_dir not in search_path:
+            search_path.append(lang_dir)
             lm.set_search_path(dirs=search_path)
 
         lang: GtkSource.Language | None = lm.get_language(id=lang_id)
@@ -343,11 +224,9 @@ class TextEditor(Adw.PreferencesGroup):
     def _on_theme_changed(
         self, _manager: Adw.StyleManager, _pspec: GObject.ParamSpec
     ) -> None:
-        """Chamado quando o tema do sistema muda (claro/escuro)."""
         self._update_theme()
 
     def _update_theme(self) -> None:
-        """Aplica o esquema de cores correto baseado no tema atual."""
         sm: GtkSource.StyleSchemeManager = GtkSource.StyleSchemeManager.get_default()
         is_dark: bool = self.style_manager.get_dark()
 
@@ -362,19 +241,16 @@ class TextEditor(Adw.PreferencesGroup):
             self.buffer.set_style_scheme(scheme)
 
     def get_text(self) -> str:
-        """Retornar o texto atual do editor."""
-        start_iter: Gtk.TextIter = self.text_buffer.get_start_iter()
-        end_iter: Gtk.TextIter = self.text_buffer.get_end_iter()
-        return self.text_buffer.get_text(
+        start_iter: Gtk.TextIter = self.buffer.get_start_iter()
+        end_iter: Gtk.TextIter = self.buffer.get_end_iter()
+        return self.buffer.get_text(
             start=start_iter, end=end_iter, include_hidden_chars=False
         )
 
     def set_text(self, text: str) -> None:
-        """Definir o texto do editor."""
-        self.text_buffer.set_text(text)
+        self.buffer.set_text(text)
 
     def highlight_char(self, index: int) -> None:
-        """Highlight character at specific index."""
         start_iter: Gtk.TextIter = self.buffer.get_iter_at_offset(char_offset=index)
         end_iter: Gtk.TextIter = self.buffer.get_iter_at_offset(char_offset=index + 1)
 
@@ -389,32 +265,19 @@ class TextEditor(Adw.PreferencesGroup):
             iter=start_iter, within_margin=0.0, use_align=False, xalign=0.0, yalign=0.0
         )
 
-    def set_editable(self, editable: bool) -> None:  # noqa: FBT001
-        """Definir se o texto pode ser editado."""
+    def set_editable(self, editable: bool) -> None:
         self.textview.set_editable(setting=editable)
 
 
+@Gtk.Template(filename='src/ui/blueprints/editor_page.ui')
 class EditorPage(Adw.PreferencesPage):
-    """Encapsulates a ConfigPanel and TextEditor for a specific mapping mode."""
+    __gtype_name__ = 'EditorPage'
 
-    def __init__(
-        self,
-        title: str,
-        lang_id: str,
-        icon_name: str,
-        default_text: str = '',
-    ) -> None:
-        super().__init__()
-        self.set_title(title=title)
-        self.set_icon_name(icon_name=icon_name)
+    config_panel = Gtk.Template.Child()
+    text_editor = Gtk.Template.Child()
 
-        self.config_panel: ConfigPanel = ConfigPanel()
-        self.add(group=self.config_panel)
-
-        self.text_editor: TextEditor = TextEditor()
-        self.text_editor.set_language_id(lang_id)
-        self.text_editor.set_text(text=default_text)
-        self.add(group=self.text_editor)
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
 
     def get_text(self) -> str:
         return self.text_editor.get_text()

@@ -1,0 +1,114 @@
+using Gtk 4.0;
+using Adw 1;
+
+menu primary_menu {
+  section {
+    item {
+      label: _("Importar texto...");
+      action: "win.abrir_txt";
+    }
+    item {
+      label: _("Importar MIDI...");
+      action: "win.importar_midi";
+    }
+  }
+
+  section {
+    item {
+      label: _("Salvar texto...");
+      action: "win.salvar_txt";
+    }
+    item {
+      label: _("Salvar MIDI...");
+      action: "win.salvar_midi";
+    }
+  }
+}
+
+template $JanelaPrincipal : Adw.ApplicationWindow {
+  title: "txt2midi";
+  default-width: 430;
+  default-height: 750;
+
+  Adw.Breakpoint {
+    condition ("max-width: 500px")
+    
+    setters {
+      switcher_bar.reveal: true;
+      header_title_stack.visible-child-name: "title";
+    }
+  }
+
+  content: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      [title]
+      Gtk.Stack header_title_stack {
+        Gtk.StackPage {
+          name: "switcher";
+          child: Adw.ViewSwitcher {
+            stack: view_stack;
+            policy: wide;
+          };
+        }
+        Gtk.StackPage {
+          name: "title";
+          child: Adw.WindowTitle {
+            title: "txt2midi";
+          };
+        }
+      }
+
+      [start]
+      Gtk.MenuButton btn_menu {
+        icon-name: "open-menu-symbolic";
+        tooltip-text: _("Menu Principal");
+        menu-model: primary_menu;
+      }
+
+      [end]
+      Gtk.Box {
+        spacing: 6;
+
+        Gtk.Button btn_tocar {
+          icon-name: "media-playback-start-symbolic";
+          tooltip-text: _("Tocar música");
+        }
+
+        Gtk.Button btn_parar {
+          icon-name: "media-playback-stop-symbolic";
+          tooltip-text: _("Parar reprodução");
+          sensitive: false;
+        }
+      }
+    }
+
+    content: Adw.ToastOverlay toast_overlay {
+      Adw.ViewStack view_stack {
+        
+        Adw.ViewStackPage {
+          name: "standard";
+          title: "Padrão";
+          icon-name: "text-x-generic-symbolic";
+          
+          child: $EditorPage page_standard {};
+        }
+        
+        Adw.ViewStackPage {
+          name: "mml";
+          title: "MML";
+          icon-name: "music-note-symbolic";
+          
+          child: $EditorPage page_mml {};
+        }
+
+      }
+    };
+
+    [bottom]
+    Adw.ViewSwitcherBar switcher_bar {
+      stack: view_stack;
+      reveal: false;
+    }
+  };
+}

@@ -1,0 +1,111 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $ConfigPanel : Adw.PreferencesGroup {
+  title: _("Parâmetros iniciais");
+
+  Adw.SpinRow spin_bpm {
+    title: _("BPM (batidas por minuto)");
+    
+    adjustment: Adjustment {
+      lower: 20;
+      upper: 400;
+      step-increment: 5;
+      value: 120;
+    };
+  }
+
+  Adw.SpinRow spin_vol {
+    title: _("Volume inicial");
+    
+    adjustment: Adjustment {
+      lower: 0;
+      upper: 127;
+      step-increment: 1;
+      value: 100;
+    };
+  }
+
+  Adw.SpinRow spin_oitava {
+    title: _("Oitava inicial");
+
+    adjustment: Adjustment {
+      lower: 1;
+      upper: 10;
+      step-increment: 1;
+      value: 5;
+    };
+  }
+
+  Adw.ActionRow row_inst {
+    title: _("Instrumento inicial");
+    activatable: true;
+    
+    [suffix]
+    Gtk.Box box_inst_wrapper {
+      valign: center;
+      spacing: 6;
+
+      Gtk.Label lbl_inst_selected {}
+
+      Gtk.Image {
+        icon-name: "pan-down-symbolic";
+      }
+
+      Gtk.Popover popover_inst {
+        autohide: true;
+        
+        styles ["menu"]
+        
+        Gtk.Box {
+          orientation: vertical;
+          spacing: 0;
+
+          Gtk.SearchEntry entry_search {
+            placeholder-text: _("Buscar...");
+            margin-top: 6;
+            margin-bottom: 6;
+            margin-start: 6;
+            margin-end: 6;
+          }
+
+          Gtk.Stack stack_inst {
+            transition-type: none;
+
+            Gtk.StackPage {
+              name: "list";
+              child: Gtk.ScrolledWindow {
+                min-content-width: 200;
+                max-content-height: 300;
+                propagate-natural-height: true;
+                propagate-natural-width: true;
+                
+                Gtk.ListView list_inst {
+                  single-click-activate: true;
+                }
+              };
+            }
+
+            Gtk.StackPage {
+              name: "empty";
+              child: Gtk.Label lbl_empty {
+                label: _("Nenhum resultado.");
+                css-classes: ["dim-label"];
+              };
+            }
+          }
+        }
+      }
+    }
+  }
+
+  Adw.ActionRow soundfont_row {
+    title: _("SoundFont");
+    
+    [suffix]
+    Gtk.Button btn_soundfont {
+      label: _("Selecionar");
+      valign: center;
+    }
+  }
+}
