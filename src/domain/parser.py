@@ -47,11 +47,13 @@ class TextParser:
                 tempo=0.0,
                 bpm=context.bpm,
                 source_index=0,
+                source_length=0,
             ),
             EventoInstrumento(
                 tempo=0.0,
                 instrument_id=context.instrument_id,
                 source_index=0,
+                source_length=0,
             ),
         ]
 
@@ -71,6 +73,7 @@ class TextParser:
 
             if token_type == 'note':
                 duration, new_pos = self._calculate_duration(texto, curr_pos, context)
+                length = new_pos - start_idx
 
                 base_char = token_str[0].upper()
                 accidental = token_str[1] if len(token_str) > 1 else None
@@ -91,6 +94,7 @@ class TextParser:
                         volume=context.volume,
                         duracao=duration,
                         source_index=start_idx,
+                        source_length=length,
                     )
                 )
                 context.tempo_evento += duration
@@ -98,11 +102,14 @@ class TextParser:
 
             elif token_type == 'rest':
                 duration, new_pos = self._calculate_duration(texto, curr_pos, context)
+                length = new_pos - start_idx
+
                 eventos.append(
                     EventoPausa(
                         tempo=context.tempo_evento,
                         duracao=duration,
                         source_index=start_idx,
+                        source_length=length,
                     )
                 )
                 context.tempo_evento += duration
@@ -116,6 +123,7 @@ class TextParser:
                 'instrument',
             ):
                 val, new_pos = self._read_number(texto, curr_pos)
+                length = new_pos - start_idx
 
                 if token_type == 'octave_set':
                     context.octave = max(0, min(val, 10))
@@ -128,6 +136,7 @@ class TextParser:
                             tempo=context.tempo_evento,
                             bpm=context.bpm,
                             source_index=start_idx,
+                            source_length=length,
                         )
                     )
                 elif token_type == 'volume':
@@ -139,6 +148,7 @@ class TextParser:
                             tempo=context.tempo_evento,
                             instrument_id=context.instrument_id,
                             source_index=start_idx,
+                            source_length=length,
                         )
                     )
                 pos = new_pos
@@ -165,8 +175,13 @@ class TextParser:
         NOTE_DURATION = 1.0
 
         eventos: list[EventoMusical] = [
-            EventoTempo(0.0, context.bpm, 0),
-            EventoInstrumento(0.0, context.instrument_id, 0),
+            EventoTempo(tempo=0.0, bpm=context.bpm, source_index=0, source_length=0),
+            EventoInstrumento(
+                tempo=0.0,
+                instrument_id=context.instrument_id,
+                source_index=0,
+                source_length=0,
+            ),
         ]
 
         pos = 0
@@ -181,7 +196,12 @@ class TextParser:
             if texto.startswith('BPM+', pos):
                 context.bpm += 80
                 eventos.append(
-                    EventoTempo(context.tempo_evento, context.bpm, start_idx)
+                    EventoTempo(
+                        tempo=context.tempo_evento,
+                        bpm=context.bpm,
+                        source_index=start_idx,
+                        source_length=4,
+                    )
                 )
                 pos += 4
                 continue
@@ -191,7 +211,10 @@ class TextParser:
                 context.instrument_id = random.randint(0, 127)
                 eventos.append(
                     EventoInstrumento(
-                        context.tempo_evento, context.instrument_id, start_idx
+                        tempo=context.tempo_evento,
+                        instrument_id=context.instrument_id,
+                        source_index=start_idx,
+                        source_length=1,
                     )
                 )
                 pos += 1
@@ -211,6 +234,7 @@ class TextParser:
                         volume=context.volume,
                         duracao=NOTE_DURATION,
                         source_index=start_idx,
+                        source_length=1,
                     )
                 )
                 last_note_pitch = pitch
@@ -231,6 +255,7 @@ class TextParser:
                         volume=context.volume,
                         duracao=NOTE_DURATION,
                         source_index=start_idx,
+                        source_length=1,
                     )
                 )
                 last_note_pitch = pitch
@@ -266,6 +291,7 @@ class TextParser:
                             volume=context.volume,
                             duracao=NOTE_DURATION,
                             source_index=start_idx,
+                            source_length=1,
                         )
                     )
                 else:
@@ -273,7 +299,10 @@ class TextParser:
                     context.instrument_id = 124
                     eventos.append(
                         EventoInstrumento(
-                            context.tempo_evento, context.instrument_id, start_idx
+                            tempo=context.tempo_evento,
+                            instrument_id=context.instrument_id,
+                            source_index=start_idx,
+                            source_length=0,
                         )
                     )
                     # Play a default note to make sound audible
@@ -285,6 +314,7 @@ class TextParser:
                             volume=context.volume,
                             duracao=NOTE_DURATION,
                             source_index=start_idx,
+                            source_length=1,
                         )
                     )
                     last_note_pitch = note_pitch
@@ -306,6 +336,7 @@ class TextParser:
                         volume=context.volume,
                         duracao=NOTE_DURATION,
                         source_index=start_idx,
+                        source_length=1,
                     )
                 )
                 last_note_pitch = pitch
@@ -316,7 +347,12 @@ class TextParser:
             # 9. Rest (;)
             if char == ';':
                 eventos.append(
-                    EventoPausa(context.tempo_evento, NOTE_DURATION, start_idx)
+                    EventoPausa(
+                        tempo=context.tempo_evento,
+                        duracao=NOTE_DURATION,
+                        source_index=start_idx,
+                        source_length=1,
+                    )
                 )
                 context.tempo_evento += NOTE_DURATION
                 pos += 1
@@ -328,6 +364,8 @@ class TextParser:
                 ev = eventos[i]
                 if isinstance(ev, EventoNota):
                     ev.duracao += NOTE_DURATION
+                    # Extend the source length to cover this character as well
+                    ev.source_length += 1
                     context.tempo_evento += NOTE_DURATION
                     found_note = True
                     break

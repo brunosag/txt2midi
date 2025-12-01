@@ -75,7 +75,7 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             mode=mode,
             soundfont_path=page.get_soundfont_path(),
             on_finished_callback=self._on_playback_terminado,
-            on_progress_callback=page.text_editor.highlight_char,
+            on_progress_callback=page.text_editor.highlight_range,
         )
         self.btn_tocar.set_sensitive(sensitive=False)
         self.btn_parar.set_sensitive(sensitive=True)

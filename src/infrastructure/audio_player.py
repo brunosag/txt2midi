@@ -30,7 +30,7 @@ class FluidSynthPlayer(threading.Thread):
         eventos: list[EventoMusical],
         settings: PlaybackSettings,
         on_finished_callback: Callable[[], None] | None = None,
-        on_progress_callback: Callable[[int], None] | None = None,
+        on_progress_callback: Callable[[int, int], None] | None = None,
     ) -> None:
         super().__init__()
         self.fs: fluidsynth.Synth = fluidsynth.Synth()
@@ -39,7 +39,9 @@ class FluidSynthPlayer(threading.Thread):
         self.settings: PlaybackSettings = settings
         self._parar_requisicao: threading.Event = threading.Event()
         self.callback_parada: Callable[[], None] | None = on_finished_callback
-        self.callback_progresso: Callable[[int], None] | None = on_progress_callback
+        self.callback_progresso: Callable[[int, int], None] | None = (
+            on_progress_callback
+        )
         self.timers: list[threading.Timer] = []
 
     @override
@@ -62,7 +64,9 @@ class FluidSynthPlayer(threading.Thread):
             self._aguardar_tempo(tempo, tempo_evento_anterior, bpm_atual)
 
             if self.callback_progresso:
-                GLib.idle_add(self.callback_progresso, evento.source_index)
+                GLib.idle_add(
+                    self.callback_progresso, evento.source_index, evento.source_length
+                )
 
             if self._parar_requisicao.is_set():
                 break
@@ -126,11 +130,11 @@ class FluidSynthPlayer(threading.Thread):
         evento: EventoMusical,
         channel: int,
         bpm_atual: float,
-        instrument_id_atual: int,
+        instrumento_id_atual: int,
     ) -> tuple[float, int]:
         if isinstance(evento, EventoTempo):
             novo_bpm = float(evento.bpm)
-            return (novo_bpm if novo_bpm > 0 else 120.0), instrument_id_atual
+            return (novo_bpm if novo_bpm > 0 else 120.0), instrumento_id_atual
 
         if isinstance(evento, EventoInstrumento):
             self.fs.program_change(chan=channel, prg=evento.instrument_id)
@@ -144,10 +148,10 @@ class FluidSynthPlayer(threading.Thread):
                 channel=channel,
                 evento=evento,
                 bpm_atual=bpm_atual,
-                instrumento_original=instrument_id_atual,
+                instrumento_original=instrumento_id_atual,
             )
 
-        return bpm_atual, instrument_id_atual
+        return bpm_atual, instrumento_id_atual
 
     def _tocar_nota(
         self,

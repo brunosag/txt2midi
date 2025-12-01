@@ -11,6 +11,7 @@ gi.require_version(namespace='GtkSource', version='5')
 
 from gi.repository import (  # noqa: E402
     Adw,  # pyright: ignore[reportMissingModuleSource]
+    Gdk,  # pyright: ignore[reportMissingModuleSource]
     Gio,  # pyright: ignore[reportMissingModuleSource]
     GObject,  # pyright: ignore[reportMissingModuleSource]
     Gtk,  # pyright: ignore[reportMissingModuleSource]
@@ -200,9 +201,14 @@ class TextEditor(Adw.PreferencesGroup):
         super().__init__()
 
         self.buffer: GtkSource.Buffer = self.textview.get_buffer()
+
         self.highlight_tag: Gtk.TextTag = self.buffer.create_tag(
-            tag_name='highlight', background='yellow', foreground='black'
+            tag_name='highlight',
         )
+        self.highlight_tag.set_property(
+            'background-rgba', Gdk.RGBA(0.2, 0.52, 0.9, 0.4)
+        )
+        self.highlight_tag.set_property('foreground', None)
 
         self.style_manager: Adw.StyleManager = Adw.StyleManager.get_default()
         _ = self.style_manager.connect('notify::dark', self._on_theme_changed)
@@ -250,9 +256,14 @@ class TextEditor(Adw.PreferencesGroup):
     def set_text(self, text: str) -> None:
         self.buffer.set_text(text)
 
-    def highlight_char(self, index: int) -> None:
+    def highlight_range(self, index: int, length: int) -> None:
+        if length <= 0:
+            return
+
         start_iter: Gtk.TextIter = self.buffer.get_iter_at_offset(char_offset=index)
-        end_iter: Gtk.TextIter = self.buffer.get_iter_at_offset(char_offset=index + 1)
+        end_iter: Gtk.TextIter = self.buffer.get_iter_at_offset(
+            char_offset=index + length
+        )
 
         self.buffer.remove_tag(
             tag=self.highlight_tag,

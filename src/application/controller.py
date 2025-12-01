@@ -23,7 +23,7 @@ class MusicController:
         mode: ParsingMode,
         soundfont_path: Path,
         on_finished_callback: Callable[[], None] | None = None,
-        on_progress_callback: Callable[[int], None] | None = None,
+        on_progress_callback: Callable[[int, int], None] | None = None,
     ) -> None:
         """Parse text and start playback."""
         self.stop_music()

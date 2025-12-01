@@ -5,8 +5,9 @@ from dataclasses import dataclass
 class EventoMusical:
     """Classe base para todos os eventos musicais."""
 
-    tempo: float  # Tempo em batidas
-    source_index: int  # Índice do caractere no texto original
+    tempo: float
+    source_index: int
+    source_length: int
 
 
 @dataclass
