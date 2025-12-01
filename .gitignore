@@ -17,6 +17,7 @@ soundfont/
 # Input & output files
 input/
 output/
+midi/
 *.mid
 *.midi
 *.txt

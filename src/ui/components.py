@@ -295,7 +295,6 @@ class TextEditor(Adw.PreferencesGroup):
         self.set_description(description='Insira o texto para geração da música.')
 
         self.buffer: GtkSource.Buffer = GtkSource.Buffer()
-        self._setup_language()
 
         self.style_manager: Adw.StyleManager = Adw.StyleManager.get_default()
         _ = self.style_manager.connect('notify::dark', self._on_theme_changed)
@@ -311,7 +310,6 @@ class TextEditor(Adw.PreferencesGroup):
         self.textview.set_bottom_margin(bottom_margin=6)
 
         self.text_buffer: Gtk.TextBuffer = self.buffer
-        self.text_buffer.set_text(text='CDEFGABH+CDEF\n\n-CDEF\n\n')
 
         scrolled_window: Gtk.ScrolledWindow = Gtk.ScrolledWindow()
         scrolled_window.set_policy(
@@ -329,7 +327,8 @@ class TextEditor(Adw.PreferencesGroup):
             tag_name='highlight', background='yellow', foreground='black'
         )
 
-    def _setup_language(self) -> None:
+    def set_language_id(self, lang_id: str) -> None:
+        """Dynamically set the syntax highlighting language."""
         lm: GtkSource.LanguageManager = GtkSource.LanguageManager.get_default()
         search_path: list[str] = lm.get_search_path()
         current_dir: str = str(Path(__file__).parent)
@@ -337,7 +336,7 @@ class TextEditor(Adw.PreferencesGroup):
             search_path.append(current_dir)
             lm.set_search_path(dirs=search_path)
 
-        lang: GtkSource.Language | None = lm.get_language(id='tcp')
+        lang: GtkSource.Language | None = lm.get_language(id=lang_id)
         if lang:
             self.buffer.set_language(language=lang)
 
@@ -393,3 +392,35 @@ class TextEditor(Adw.PreferencesGroup):
     def set_editable(self, editable: bool) -> None:  # noqa: FBT001
         """Definir se o texto pode ser editado."""
         self.textview.set_editable(setting=editable)
+
+
+class EditorPage(Adw.PreferencesPage):
+    """Encapsulates a ConfigPanel and TextEditor for a specific mapping mode."""
+
+    def __init__(
+        self,
+        title: str,
+        lang_id: str,
+        icon_name: str,
+        default_text: str = '',
+    ) -> None:
+        super().__init__()
+        self.set_title(title=title)
+        self.set_icon_name(icon_name=icon_name)
+
+        self.config_panel: ConfigPanel = ConfigPanel()
+        self.add(group=self.config_panel)
+
+        self.text_editor: TextEditor = TextEditor()
+        self.text_editor.set_language_id(lang_id)
+        self.text_editor.set_text(text=default_text)
+        self.add(group=self.text_editor)
+
+    def get_text(self) -> str:
+        return self.text_editor.get_text()
+
+    def get_settings(self) -> PlaybackSettings:
+        return self.config_panel.get_playback_settings()
+
+    def get_soundfont_path(self) -> Path:
+        return self.config_panel.get_soundfont_path()

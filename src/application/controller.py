@@ -3,7 +3,7 @@ from pathlib import Path
 
 from domain.events import EventoMusical
 from domain.models import PlaybackSettings
-from domain.parser import TextParser
+from domain.parser import ParsingMode, TextParser
 from infrastructure.audio_player import FluidSynthPlayer
 from infrastructure.midi_exporter import MIDIExporter
 from infrastructure.midi_importer import MIDIImporter
@@ -20,6 +20,7 @@ class MusicController:
         self,
         text: str,
         settings: PlaybackSettings,
+        mode: ParsingMode,
         soundfont_path: Path,
         on_finished_callback: Callable[[], None] | None = None,
         on_progress_callback: Callable[[int], None] | None = None,
@@ -27,7 +28,9 @@ class MusicController:
         """Parse text and start playback."""
         self.stop_music()
 
-        eventos: list[EventoMusical] = self.parser.parse(texto=text, settings=settings)
+        eventos: list[EventoMusical] = self.parser.parse(
+            texto=text, settings=settings, mode=mode
+        )
         self.current_player = FluidSynthPlayer(
             soundfont_path=soundfont_path,
             eventos=eventos,
@@ -48,10 +51,13 @@ class MusicController:
         self,
         text: str,
         settings: PlaybackSettings,
+        mode: ParsingMode,
         filepath: Path,
     ) -> None:
         """Parse text and export to MIDI file."""
-        eventos: list[EventoMusical] = self.parser.parse(texto=text, settings=settings)
+        eventos: list[EventoMusical] = self.parser.parse(
+            texto=text, settings=settings, mode=mode
+        )
         self.exporter.save(eventos=eventos, caminho_arquivo=filepath)
 
     def import_midi(self, filepath: Path) -> tuple[str, int, int, int]:

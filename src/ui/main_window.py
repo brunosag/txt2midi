@@ -1,11 +1,11 @@
 from pathlib import Path
-from typing import override
+from typing import cast, override
 
 import gi
 
 from application.controller import MusicController
-from domain.models import PlaybackSettings
-from ui.components import ConfigPanel, TextEditor
+from domain.parser import ParsingMode
+from ui.components import EditorPage
 
 gi.require_version(namespace='Gtk', version='4.0')
 gi.require_version(namespace='Adw', version='1')
@@ -14,186 +14,195 @@ from gi.repository import (  # noqa: E402
     Adw,  # pyright: ignore[reportMissingModuleSource]
     Gio,  # pyright: ignore[reportMissingModuleSource]
     GLib,  # pyright: ignore[reportMissingModuleSource]
+    GObject,  # pyright: ignore[reportMissingModuleSource]
     Gtk,  # pyright: ignore[reportMissingModuleSource]
 )
 
 
 class JanelaPrincipal(Adw.ApplicationWindow):
-    """Janela principal da aplicação."""
+    """Janela principal da aplicação com suporte a abas."""
 
     def __init__(self, app: Adw.Application) -> None:
         super().__init__(application=app)
         self.app: Adw.Application = app
         self.set_title(title='txt2midi')
-        self.set_default_size(width=600, height=700)
+        self.set_default_size(width=430, height=750)
 
         # Controlador da aplicação
         self.controller: MusicController = MusicController()
-        self.caminho_txt_atual: Path | None = None
 
-        # Caixa GTK principal
-        self.box_principal: Gtk.Box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.set_content(content=self.box_principal)
+        # Toolbar View
+        self.toolbar_view: Adw.ToolbarView = Adw.ToolbarView()
+        self.set_content(content=self.toolbar_view)
 
         # Barra de cabeçalho
         self._construir_header()
 
         # Sobreposição para notificações
         self.toast_overlay: Adw.ToastOverlay = Adw.ToastOverlay()
-        self.toast_overlay.set_vexpand(expand=True)
-        self.box_principal.append(child=self.toast_overlay)
+        self.toolbar_view.set_content(content=self.toast_overlay)
 
-        # PreferencesPage como container principal
-        self.prefs_page: Adw.PreferencesPage = Adw.PreferencesPage()
-        self.toast_overlay.set_child(child=self.prefs_page)
+        # Container de Abas (Stack)
+        self.view_stack: Adw.ViewStack = Adw.ViewStack()
+        self.toast_overlay.set_child(child=self.view_stack)
 
-        # Adicionar grupos de configuração e texto
-        self.config_panel: ConfigPanel = ConfigPanel()
-        self.prefs_page.add(group=self.config_panel)
+        # Aba 1: Modo Padrão
+        self.page_standard: EditorPage = EditorPage(
+            title='Padrão',
+            lang_id='standard',
+            icon_name='text-x-generic-symbolic',
+            default_text='BPM+ A B C D \n ?',
+        )
 
-        self.text_editor: TextEditor = TextEditor()
-        self.prefs_page.add(group=self.text_editor)
+        page_std = self.view_stack.add_titled(
+            child=self.page_standard, name='standard', title='Padrão'
+        )
+        page_std.set_icon_name('text-x-generic-symbolic')
+
+        # Aba 2: Modo MML
+        self.page_mml: EditorPage = EditorPage(
+            title='MML',
+            lang_id='tcp',
+            icon_name='music-note-symbolic',
+            default_text='T120 I19 C D E F',
+        )
+
+        page_mml = self.view_stack.add_titled(
+            child=self.page_mml, name='mml', title='MML'
+        )
+        page_mml.set_icon_name('music-note-symbolic')
+
+        self.switcher_title.set_stack(stack=self.view_stack)
+        self._construir_bottom_bar()
 
     def _construir_header(self) -> None:
         header: Adw.HeaderBar = Adw.HeaderBar()
-        self.box_principal.append(child=header)
+        self.toolbar_view.add_top_bar(widget=header)
 
-        # Container para botões da esquerda
-        box_esquerda = Gtk.Box(spacing=6)
-        header.pack_start(child=box_esquerda)
+        # Widget central: Título com switcher de abas
+        self.switcher_title: Adw.ViewSwitcherTitle = Adw.ViewSwitcherTitle()
+        header.set_title_widget(title_widget=self.switcher_title)
 
-        # Botão 'Abrir'
-        self.btn_abrir: Gtk.Button = Gtk.Button()
-        self.btn_abrir.set_label(label='Abrir')
-        self.btn_abrir.set_icon_name(icon_name='document-open-symbolic')
-        self.btn_abrir.set_tooltip_text(text='Abrir texto')
+        # Esquerda: Botão de menu
+        self.btn_menu: Gtk.MenuButton = Gtk.MenuButton()
+        self.btn_menu.set_icon_name(icon_name='open-menu-symbolic')
+        self.btn_menu.set_tooltip_text(text='Menu Principal')
 
-        # Ação 'Abrir'
-        action_abrir_txt: Gio.SimpleAction = Gio.SimpleAction.new(
-            name='abrir_txt', parameter_type=None
+        # Modelo do menu
+        menu_model: Gio.Menu = Gio.Menu()
+
+        section_file: Gio.Menu = Gio.Menu()
+        section_file.append(label='Importar texto...', detailed_action='win.abrir_txt')
+        section_file.append(
+            label='Importar MIDI...', detailed_action='win.importar_midi'
         )
-        _ = action_abrir_txt.connect('activate', self._on_abrir_txt_clicked)
-        self.add_action(action=action_abrir_txt)
-        self.btn_abrir.set_action_name(action_name='win.abrir_txt')
-        box_esquerda.append(child=self.btn_abrir)
+        menu_model.append_section(label=None, section=section_file)
 
-        # Botão 'Importar MIDI'
-        self.btn_importar: Gtk.Button = Gtk.Button()
-        self.btn_importar.set_icon_name(icon_name='folder-music-symbolic')
-        self.btn_importar.set_tooltip_text(text='Importar MIDI')
+        section_save: Gio.Menu = Gio.Menu()
+        section_save.append(label='Salvar texto...', detailed_action='win.salvar_txt')
+        section_save.append(label='Salvar MIDI...', detailed_action='win.salvar_midi')
+        menu_model.append_section(label=None, section=section_save)
 
-        # Ação 'Importar MIDI'
-        action_importar_midi: Gio.SimpleAction = Gio.SimpleAction.new(
-            name='importar_midi', parameter_type=None
-        )
-        _ = action_importar_midi.connect('activate', self._on_importar_midi_clicked)
-        self.add_action(action=action_importar_midi)
-        self.btn_importar.set_action_name(action_name='win.importar_midi')
-        box_esquerda.append(child=self.btn_importar)
+        self.btn_menu.set_menu_model(menu_model=menu_model)
+        header.pack_start(child=self.btn_menu)
 
-        # Menu 'Salvar'
-        menu_salvar_model: Gio.Menu = Gio.Menu()
-        menu_salvar_model.append(
-            label='Salvar texto (.txt)', detailed_action='win.salvar_txt'
-        )
-        menu_salvar_model.append(
-            label='Salvar música (.mid)', detailed_action='win.salvar_midi'
-        )
+        # Ações do menu
+        self._add_action(name='abrir_txt', callback=self._on_abrir_txt_clicked)
+        self._add_action(name='importar_midi', callback=self._on_importar_midi_clicked)
+        self._add_action(name='salvar_txt', callback=self._on_salvar_txt_clicked)
+        self._add_action(name='salvar_midi', callback=self._on_salvar_midi_clicked)
 
-        self.btn_menu_salvar: Gtk.MenuButton = Gtk.MenuButton.new()
-        self.btn_menu_salvar.set_icon_name(icon_name='document-save-symbolic')
-        self.btn_menu_salvar.set_tooltip_text(text='Salvar')
-        self.btn_menu_salvar.set_menu_model(menu_model=menu_salvar_model)
-
-        # Ação 'Salvar TXT'
-        action_salvar_txt: Gio.SimpleAction = Gio.SimpleAction.new(name='salvar_txt')
-        _ = action_salvar_txt.connect('activate', self._on_salvar_txt_clicked)
-        self.add_action(action=action_salvar_txt)
-
-        # Ação 'Salvar MIDI'
-        action_salvar_midi: Gio.SimpleAction = Gio.SimpleAction.new(name='salvar_midi')
-        _ = action_salvar_midi.connect('activate', self._on_salvar_midi_clicked)
-        self.add_action(action=action_salvar_midi)
-        box_esquerda.append(child=self.btn_menu_salvar)
-
-        # Controles
+        # Direita: Controles de reprodução
         box_controles: Gtk.Box = Gtk.Box(spacing=6)
         header.pack_end(child=box_controles)
 
-        # Botão 'Tocar'
         self.btn_tocar: Gtk.Button = Gtk.Button.new_from_icon_name(
             icon_name='media-playback-start-symbolic',
         )
         self.btn_tocar.set_tooltip_text(text='Tocar música')
         _ = self.btn_tocar.connect('clicked', self._on_tocar_clicked)
-        self.btn_tocar.set_sensitive(sensitive=True)
         box_controles.append(child=self.btn_tocar)
 
-        # Botão 'Parar'
         self.btn_parar: Gtk.Button = Gtk.Button.new_from_icon_name(
             icon_name='media-playback-stop-symbolic',
         )
         self.btn_parar.set_tooltip_text(text='Parar reprodução')
-        _ = self.btn_parar.connect('clicked', self._on_parar_clicked)
         self.btn_parar.set_sensitive(sensitive=False)
+        _ = self.btn_parar.connect('clicked', self._on_parar_clicked)
         box_controles.append(child=self.btn_parar)
 
-    def _get_ui_settings(self) -> PlaybackSettings:
-        """Ler os valores da interface e retornar PlaybackSettings."""
-        return self.config_panel.get_playback_settings()
+    def _construir_bottom_bar(self) -> None:
+        """Adiciona a barra inferior que aparece em telas estreitas."""
+        switcher_bar: Adw.ViewSwitcherBar = Adw.ViewSwitcherBar()
+        switcher_bar.set_stack(stack=self.view_stack)
+        self.toolbar_view.add_bottom_bar(widget=switcher_bar)
 
-    def _get_texto_atual(self) -> str:
-        return self.text_editor.get_text()
+        # Revelar a barra inferior apenas quando o título estiver visível (modo mobile)
+        _ = self.switcher_title.bind_property(
+            'title-visible',
+            switcher_bar,
+            'reveal',
+            GObject.BindingFlags.SYNC_CREATE,
+        )
+
+    def _add_action(self, name: str, callback) -> None:
+        action: Gio.SimpleAction = Gio.SimpleAction.new(name=name, parameter_type=None)
+        _ = action.connect('activate', callback)
+        self.add_action(action=action)
+
+    def _get_active_page(self) -> EditorPage:
+        """Retorna a página (aba) atualmente visível."""
+        visible_name = self.view_stack.get_visible_child_name()
+        if visible_name == 'mml':
+            return self.page_mml
+        return self.page_standard
+
+    def _get_active_mode(self) -> ParsingMode:
+        """Retorna o modo de parsing baseado na aba ativa."""
+        return cast('ParsingMode', self.view_stack.get_visible_child_name())
 
     def _on_tocar_clicked(self, _widget: Gtk.Button) -> None:
-        """Iniciar a reprodução e atualizar interface."""
-        settings: PlaybackSettings = self._get_ui_settings()
-        texto: str = self._get_texto_atual()
-        soundfont_path: Path = self.config_panel.get_soundfont_path()
+        """Iniciar a reprodução usando o contexto da aba ativa."""
+        page: EditorPage = self._get_active_page()
+        mode: ParsingMode = self._get_active_mode()
 
         self.controller.play_music(
-            text=texto,
-            settings=settings,
-            soundfont_path=soundfont_path,
+            text=page.get_text(),
+            settings=page.get_settings(),
+            mode=mode,
+            soundfont_path=page.get_soundfont_path(),
             on_finished_callback=self._on_playback_terminado,
-            on_progress_callback=self.text_editor.highlight_char,
+            on_progress_callback=page.text_editor.highlight_char,
         )
         self.btn_tocar.set_sensitive(sensitive=False)
         self.btn_parar.set_sensitive(sensitive=True)
-        self.text_editor.set_editable(editable=False)
+        page.text_editor.set_editable(editable=False)
 
     def _on_parar_clicked(self, _widget: Gtk.Button) -> None:
-        """Solicitar parada da reprodução."""
         self.controller.stop_music()
 
     def _on_playback_terminado(self) -> None:
-        """Atualizar botões de reprodução após término."""
         self.btn_tocar.set_sensitive(sensitive=True)
         self.btn_parar.set_sensitive(sensitive=False)
-        self.text_editor.set_editable(editable=True)
+        self._get_active_page().text_editor.set_editable(editable=True)
 
     def _on_abrir_txt_clicked(
         self,
         _action: Gio.SimpleAction,
         _param: GLib.Variant,
     ) -> None:
-        """Abrir seletor de arquivo para carregar texto."""
         dialog: Gtk.FileChooserDialog = Gtk.FileChooserDialog(
             title='Abrir arquivo',
             transient_for=self,
             action=Gtk.FileChooserAction.OPEN,
         )
         _ = dialog.add_button(
-            button_text='_Cancelar',
-            response_id=Gtk.ResponseType.CANCEL,
+            button_text='_Cancelar', response_id=Gtk.ResponseType.CANCEL
         )
-        _ = dialog.add_button(
-            button_text='_Abrir',
-            response_id=Gtk.ResponseType.OK,
-        )
+        _ = dialog.add_button(button_text='_Abrir', response_id=Gtk.ResponseType.OK)
 
         filter_txt: Gtk.FileFilter = Gtk.FileFilter()
-        filter_txt.set_name(name='Text files (*.txt)')
+        filter_txt.set_name(name='Arquivos de texto (*.txt)')
         filter_txt.add_pattern(pattern='*.txt')
         dialog.add_filter(filter=filter_txt)
 
@@ -210,13 +219,11 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             and (file := dialog.get_file())
             and (path := file.get_path())
         ):
-            self.caminho_txt_atual = Path(path)
-            with self.caminho_txt_atual.open() as f:
+            caminho: Path = Path(path)
+            with caminho.open() as f:
                 conteudo: str = f.read()
-            self.text_editor.set_text(text=conteudo)
-            self._show_toast(
-                mensagem=f"Texto '{self.caminho_txt_atual.name}' carregado."
-            )
+            self._get_active_page().text_editor.set_text(text=conteudo)
+            self._show_toast(mensagem=f'Carregado: {caminho.name}')
         dialog.destroy()
 
     def _on_importar_midi_clicked(
@@ -224,23 +231,18 @@ class JanelaPrincipal(Adw.ApplicationWindow):
         _action: Gio.SimpleAction,
         _param: GLib.Variant,
     ) -> None:
-        """Abrir seletor de arquivo para importar MIDI."""
         dialog: Gtk.FileChooserDialog = Gtk.FileChooserDialog(
             title='Importar MIDI',
             transient_for=self,
             action=Gtk.FileChooserAction.OPEN,
         )
         _ = dialog.add_button(
-            button_text='_Cancelar',
-            response_id=Gtk.ResponseType.CANCEL,
+            button_text='_Cancelar', response_id=Gtk.ResponseType.CANCEL
         )
-        _ = dialog.add_button(
-            button_text='_Importar',
-            response_id=Gtk.ResponseType.OK,
-        )
+        _ = dialog.add_button(button_text='_Importar', response_id=Gtk.ResponseType.OK)
 
         filter_midi: Gtk.FileFilter = Gtk.FileFilter()
-        filter_midi.set_name(name='MIDI files (*.mid, *.midi)')
+        filter_midi.set_name(name='Arquivos MIDI (*.mid, *.midi)')
         filter_midi.add_pattern(pattern='*.mid')
         filter_midi.add_pattern(pattern='*.midi')
         dialog.add_filter(filter=filter_midi)
@@ -258,16 +260,17 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             and (file := dialog.get_file())
             and (path := file.get_path())
         ):
-            texto_convertido, inst_id, vol, bpm = self.controller.import_midi(
-                filepath=Path(path)
-            )
-            self.text_editor.set_text(text=texto_convertido)
-            self.config_panel.set_instrument(instrument_id=inst_id)
-            self.config_panel.set_volume(volume=vol)
-            self.config_panel.set_bpm(bpm=bpm)
+            texto, inst, vol, bpm = self.controller.import_midi(filepath=Path(path))
 
-            self.caminho_txt_atual = None
-            self._show_toast(mensagem='Arquivo MIDI importado com sucesso.')
+            self.view_stack.set_visible_child_name(name='mml')
+            page: EditorPage = self.page_mml
+
+            page.text_editor.set_text(text=texto)
+            page.config_panel.set_instrument(instrument_id=inst)
+            page.config_panel.set_volume(volume=vol)
+            page.config_panel.set_bpm(bpm=bpm)
+
+            self._show_toast(mensagem='MIDI importado.')
         dialog.destroy()
 
     def _on_salvar_txt_clicked(
@@ -275,27 +278,16 @@ class JanelaPrincipal(Adw.ApplicationWindow):
         _action: Gio.SimpleAction,
         _param: GLib.Variant,
     ) -> None:
-        """Abrir seletor para salvar texto."""
         dialog: Gtk.FileChooserDialog = Gtk.FileChooserDialog(
             title='Salvar texto',
             transient_for=self,
             action=Gtk.FileChooserAction.SAVE,
         )
         _ = dialog.add_button(
-            button_text='_Cancelar',
-            response_id=Gtk.ResponseType.CANCEL,
+            button_text='_Cancelar', response_id=Gtk.ResponseType.CANCEL
         )
-        _ = dialog.add_button(
-            button_text='_Salvar',
-            response_id=Gtk.ResponseType.OK,
-        )
-
-        if self.caminho_txt_atual:
-            _ = dialog.set_file(
-                file=Gio.File.new_for_path(path=str(self.caminho_txt_atual))
-            )
-        else:
-            dialog.set_current_name(name='musica.txt')
+        _ = dialog.add_button(button_text='_Salvar', response_id=Gtk.ResponseType.OK)
+        dialog.set_current_name(name='musica.txt')
 
         _ = dialog.connect('response', self._on_salvar_txt_response)
         dialog.show()
@@ -310,12 +302,10 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             and (file := dialog.get_file())
             and (path := file.get_path())
         ):
-            caminho_txt: Path = Path(path)
-            conteudo: str = self._get_texto_atual()
-            with caminho_txt.open('w') as f:
-                _ = f.write(conteudo)
-            self.caminho_txt_atual = caminho_txt
-            self._show_toast(mensagem='Arquivo de texto salvo.')
+            caminho: Path = Path(path)
+            with caminho.open('w') as f:
+                _ = f.write(self._get_active_page().get_text())
+            self._show_toast(mensagem='Arquivo salvo.')
         dialog.destroy()
 
     def _on_salvar_midi_clicked(
@@ -323,20 +313,15 @@ class JanelaPrincipal(Adw.ApplicationWindow):
         _action: Gio.SimpleAction,
         _param: GLib.Variant,
     ) -> None:
-        """Abrir diálogo de salvar MIDI."""
         dialog: Gtk.FileChooserDialog = Gtk.FileChooserDialog(
             title='Salvar MIDI',
             transient_for=self,
             action=Gtk.FileChooserAction.SAVE,
         )
         _ = dialog.add_button(
-            button_text='_Cancelar',
-            response_id=Gtk.ResponseType.CANCEL,
+            button_text='_Cancelar', response_id=Gtk.ResponseType.CANCEL
         )
-        _ = dialog.add_button(
-            button_text='_Salvar',
-            response_id=Gtk.ResponseType.OK,
-        )
+        _ = dialog.add_button(button_text='_Salvar', response_id=Gtk.ResponseType.OK)
         dialog.set_current_name(name='musica.mid')
 
         filter_midi: Gtk.FileFilter = Gtk.FileFilter()
@@ -344,6 +329,7 @@ class JanelaPrincipal(Adw.ApplicationWindow):
         filter_midi.add_pattern(pattern='*.mid')
         filter_midi.add_pattern(pattern='*.midi')
         dialog.add_filter(filter=filter_midi)
+
         _ = dialog.connect('response', self._on_salvar_midi_response)
         dialog.show()
 
@@ -352,7 +338,6 @@ class JanelaPrincipal(Adw.ApplicationWindow):
         dialog: Gtk.FileChooserDialog,
         response: Gtk.ResponseType,
     ) -> None:
-        """Salvar MIDI."""
         if (
             response == Gtk.ResponseType.OK
             and (file := dialog.get_file())
@@ -362,19 +347,18 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             if caminho.suffix not in ['.mid', '.midi']:
                 caminho = caminho.with_suffix(suffix='.mid')
 
-            settings: PlaybackSettings = self._get_ui_settings()
-            texto: str = self._get_texto_atual()
+            page: EditorPage = self._get_active_page()
 
             self.controller.export_midi(
-                text=texto,
-                settings=settings,
+                text=page.get_text(),
+                settings=page.get_settings(),
+                mode=self._get_active_mode(),
                 filepath=caminho,
             )
-            self._show_toast(mensagem='Arquivo MIDI salvo.')
+            self._show_toast(mensagem='MIDI exportado.')
         dialog.destroy()
 
     def _show_toast(self, mensagem: str) -> None:
-        """Mostrar uma notificação (toast) no overlay."""
         toast: Adw.Toast = Adw.Toast(title=mensagem, timeout=3)
         self.toast_overlay.add_toast(toast)
 

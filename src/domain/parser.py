@@ -1,4 +1,6 @@
+import random
 import re
+from typing import Literal
 
 from config import NOTAS_MIDI_BASE
 from domain.events import (
@@ -10,13 +12,13 @@ from domain.events import (
 )
 from domain.models import ParsingContext, PlaybackSettings
 
+ParsingMode = Literal['mml', 'standard']
+
 
 class TextParser:
-    """Parses MML-like text into musical events."""
+    """Parses text into musical events using specific strategies."""
 
-    # Regex patterns for tokenizing
-    # UPDATED: Added 'H' to the note group [A-H]
-    TOKEN_REGEX = re.compile(
+    TOKEN_REGEX_MML = re.compile(
         r"""
         (?P<note>[A-H][#\+\-b]?)      # Notes: A-H, plus accidentals
         |(?P<rest>[RP])               # Rests
@@ -31,9 +33,15 @@ class TextParser:
         re.VERBOSE | re.IGNORECASE,
     )
 
-    def parse(self, texto: str, settings: PlaybackSettings) -> list[EventoMusical]:
+    def parse(
+        self, texto: str, settings: PlaybackSettings, mode: ParsingMode
+    ) -> list[EventoMusical]:
+        if mode == 'standard':
+            return self._parse_standard(texto, settings)
+        return self._parse_mml(texto, settings)
+
+    def _parse_mml(self, texto: str, settings: PlaybackSettings) -> list[EventoMusical]:
         context = ParsingContext(settings)
-        # Use keyword arguments to avoid inheritance ordering issues
         eventos: list[EventoMusical] = [
             EventoTempo(
                 tempo=0.0,
@@ -51,8 +59,7 @@ class TextParser:
         text_len = len(texto)
 
         while pos < text_len:
-            # Try to match a token
-            match = self.TOKEN_REGEX.match(texto, pos)
+            match = self.TOKEN_REGEX_MML.match(texto, pos)
             if not match:
                 pos += 1
                 continue
@@ -65,7 +72,6 @@ class TextParser:
             if token_type == 'note':
                 duration, new_pos = self._calculate_duration(texto, curr_pos, context)
 
-                # Parse Pitch
                 base_char = token_str[0].upper()
                 accidental = token_str[1] if len(token_str) > 1 else None
 
@@ -75,10 +81,7 @@ class TextParser:
                 elif accidental in ('b', '-'):
                     pitch -= 1
 
-                # Adjust Octave
                 pitch += (context.octave - 5) * 12
-
-                # Validate range
                 pitch = max(0, min(127, pitch))
 
                 eventos.append(
@@ -153,6 +156,190 @@ class TextParser:
 
         return eventos
 
+    def _parse_standard(
+        self, texto: str, settings: PlaybackSettings
+    ) -> list[EventoMusical]:
+        """Implements the 'Padrão' logic."""
+        context = ParsingContext(settings)
+        # Fixed duration for standard mode notes (e.g. 1 beat)
+        NOTE_DURATION = 1.0
+
+        eventos: list[EventoMusical] = [
+            EventoTempo(0.0, context.bpm, 0),
+            EventoInstrumento(0.0, context.instrument_id, 0),
+        ]
+
+        pos = 0
+        text_len = len(texto)
+        last_note_pitch: int | None = None
+
+        while pos < text_len:
+            char = texto[pos]
+            start_idx = pos
+
+            # 1. BPM+ Check (Lookahead for sequence)
+            if texto.startswith('BPM+', pos):
+                context.bpm += 80
+                eventos.append(
+                    EventoTempo(context.tempo_evento, context.bpm, start_idx)
+                )
+                pos += 4
+                continue
+
+            # 2. Newline: Random Instrument
+            if char == '\n':
+                context.instrument_id = random.randint(0, 127)
+                eventos.append(
+                    EventoInstrumento(
+                        context.tempo_evento, context.instrument_id, start_idx
+                    )
+                )
+                pos += 1
+                continue
+
+            # 3. Notes (A-G)
+            upper_char = char.upper()
+            if 'A' <= upper_char <= 'G':
+                pitch = NOTAS_MIDI_BASE.get(upper_char, 60)
+                pitch += (context.octave - 5) * 12
+                pitch = max(0, min(127, pitch))
+
+                eventos.append(
+                    EventoNota(
+                        tempo=context.tempo_evento,
+                        pitch=pitch,
+                        volume=context.volume,
+                        duracao=NOTE_DURATION,
+                        source_index=start_idx,
+                    )
+                )
+                last_note_pitch = pitch
+                context.tempo_evento += NOTE_DURATION
+                pos += 1
+                continue
+
+            # 4. Note H (Bb / A#) -> Base 70
+            if upper_char == 'H':
+                pitch = 70
+                pitch += (context.octave - 5) * 12
+                pitch = max(0, min(127, pitch))
+
+                eventos.append(
+                    EventoNota(
+                        tempo=context.tempo_evento,
+                        pitch=pitch,
+                        volume=context.volume,
+                        duracao=NOTE_DURATION,
+                        source_index=start_idx,
+                    )
+                )
+                last_note_pitch = pitch
+                context.tempo_evento += NOTE_DURATION
+                pos += 1
+                continue
+
+            # 5. Octave Increase (+) / Decrease (-)
+            if char == '+':
+                context.octave = min(context.octave + 1, 10)
+                pos += 1
+                continue
+            if char == '-':
+                context.octave = max(context.octave - 1, 0)
+                pos += 1
+                continue
+
+            # 6. Volume (Space)
+            if char == ' ':
+                new_vol = context.volume * 2
+                context.volume = min(127, new_vol) if new_vol > 0 else 127
+                pos += 1
+                continue
+
+            # 7. Vowels (O, I, U) - Repeat or Telephone
+            if upper_char in ('O', 'I', 'U'):
+                if last_note_pitch is not None:
+                    # Repeat last note
+                    eventos.append(
+                        EventoNota(
+                            tempo=context.tempo_evento,
+                            pitch=last_note_pitch,
+                            volume=context.volume,
+                            duracao=NOTE_DURATION,
+                            source_index=start_idx,
+                        )
+                    )
+                else:
+                    # Telephone Ring (GM 124 in 0-based indexing)
+                    context.instrument_id = 124
+                    eventos.append(
+                        EventoInstrumento(
+                            context.tempo_evento, context.instrument_id, start_idx
+                        )
+                    )
+                    # Play a default note to make sound audible
+                    note_pitch = 60
+                    eventos.append(
+                        EventoNota(
+                            tempo=context.tempo_evento,
+                            pitch=note_pitch,
+                            volume=context.volume,
+                            duracao=NOTE_DURATION,
+                            source_index=start_idx,
+                        )
+                    )
+                    last_note_pitch = note_pitch
+
+                context.tempo_evento += NOTE_DURATION
+                pos += 1
+                continue
+
+            # 8. Random Note (?)
+            if char == '?':
+                random_note = random.choice(list(NOTAS_MIDI_BASE.values()))
+                pitch = random_note + ((context.octave - 5) * 12)
+                pitch = max(0, min(127, pitch))
+
+                eventos.append(
+                    EventoNota(
+                        tempo=context.tempo_evento,
+                        pitch=pitch,
+                        volume=context.volume,
+                        duracao=NOTE_DURATION,
+                        source_index=start_idx,
+                    )
+                )
+                last_note_pitch = pitch
+                context.tempo_evento += NOTE_DURATION
+                pos += 1
+                continue
+
+            # 9. Rest (;)
+            if char == ';':
+                eventos.append(
+                    EventoPausa(context.tempo_evento, NOTE_DURATION, start_idx)
+                )
+                context.tempo_evento += NOTE_DURATION
+                pos += 1
+                continue
+
+            # 10. Default / Other characters: Continue current sound
+            found_note = False
+            for i in range(len(eventos) - 1, -1, -1):
+                ev = eventos[i]
+                if isinstance(ev, EventoNota):
+                    ev.duracao += NOTE_DURATION
+                    context.tempo_evento += NOTE_DURATION
+                    found_note = True
+                    break
+
+            if not found_note:
+                # If no note is playing, act as pause
+                pass
+
+            pos += 1
+
+        return eventos
+
     def _read_number(self, text: str, pos: int) -> tuple[int, int]:
         """Reads a number starting at pos. Returns (value, new_pos)."""
         match = re.match(r'\d+', text[pos:])
@@ -166,24 +353,16 @@ class TextParser:
         pos: int,
         context: ParsingContext,
     ) -> tuple[float, int]:
-        """Determines duration based on optional number and dots.
-        Returns (duration_in_beats, new_pos).
-        """
-        # Read number (e.g., '4' in 'C4')
+        """Determines duration based on optional number and dots."""
         value_num, new_pos = self._read_number(text, pos)
-
-        # If no number provided, use default
         length_val = value_num if value_num > 0 else context.default_length
 
         duration = 4.0 / length_val
-
-        # Check for dots ('.')
         dots = 0
         while new_pos < len(text) and text[new_pos] == '.':
             dots += 1
             new_pos += 1
 
-        # Apply dot modifier (adds half of previous value)
         if dots > 0:
             original_dur = duration
             add = original_dur * 0.5

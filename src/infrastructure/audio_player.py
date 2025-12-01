@@ -48,6 +48,9 @@ class FluidSynthPlayer(threading.Thread):
 
         channel = 0
         bpm_atual = float(self.settings.bpm)
+        if bpm_atual <= 0:
+            bpm_atual = 120.0
+
         instrumento_id_atual = self._configurar_instrumento_inicial(channel)
         tempo_evento_anterior = 0.0
 
@@ -73,7 +76,6 @@ class FluidSynthPlayer(threading.Thread):
 
             tempo_evento_anterior = tempo
 
-        # Aguardar ou cancelar timers pendentes
         if self._parar_requisicao.is_set():
             for timer in self.timers:
                 timer.cancel()
@@ -114,8 +116,9 @@ class FluidSynthPlayer(threading.Thread):
         bpm: float,
     ) -> None:
         delta_batidas = tempo_atual - tempo_anterior
+        safe_bpm = max(1.0, bpm)
         if delta_batidas > 0:
-            segundos_espera = (60.0 / bpm) * delta_batidas
+            segundos_espera = (60.0 / safe_bpm) * delta_batidas
             time.sleep(segundos_espera)
 
     def _processar_evento(
@@ -126,7 +129,8 @@ class FluidSynthPlayer(threading.Thread):
         instrument_id_atual: int,
     ) -> tuple[float, int]:
         if isinstance(evento, EventoTempo):
-            return float(evento.bpm), instrument_id_atual
+            novo_bpm = float(evento.bpm)
+            return (novo_bpm if novo_bpm > 0 else 120.0), instrument_id_atual
 
         if isinstance(evento, EventoInstrumento):
             self.fs.program_change(chan=channel, prg=evento.instrument_id)
@@ -151,10 +155,11 @@ class FluidSynthPlayer(threading.Thread):
         evento: EventoNota,
         bpm_atual: float,
     ) -> None:
-        duracao_seg = (60.0 / bpm_atual) * evento.duracao
+        safe_bpm = max(1.0, bpm_atual)
+        duracao_seg = (60.0 / safe_bpm) * evento.duracao
+
         self.fs.noteon(chan=channel, key=evento.pitch, vel=evento.volume)
 
-        # Limpar timers finalizados
         self.timers = [t for t in self.timers if t.is_alive()]
 
         timer = threading.Timer(
@@ -172,13 +177,13 @@ class FluidSynthPlayer(threading.Thread):
         bpm_atual: float,
         instrumento_original: int,
     ) -> None:
-        duracao_seg = (60.0 / bpm_atual) * evento.duracao
+        safe_bpm = max(1.0, bpm_atual)
+        duracao_seg = (60.0 / safe_bpm) * evento.duracao
 
         self.fs.program_change(channel, evento.instrument_id)
         self.fs.noteon(channel, evento.pitch, evento.volume)
         self.fs.program_change(channel, instrumento_original)
 
-        # Limpar timers finalizados
         self.timers = [t for t in self.timers if t.is_alive()]
 
         timer = threading.Timer(
