@@ -91,14 +91,8 @@ class FluidSynthPlayer(threading.Thread):
         _ = GLib.idle_add(self.notificar_parada_main_thread)
 
     def _inicializar_fluidsynth(self) -> None:
-        try:
-            self.fs.start()
-            self.fs.sfload(str(self.soundfont_path))
-        except Exception:
-            logger.exception('Erro ao inicializar o FluidSynth')
-            if self.fs:
-                self.fs.delete()
-            self.notificar_parada_main_thread()
+        self.fs.start()
+        self.fs.sfload(str(self.soundfont_path))
 
     def _configurar_instrumento_inicial(self, channel: int) -> int:
         instrument_id = -1

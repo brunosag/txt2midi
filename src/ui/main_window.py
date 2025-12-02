@@ -119,7 +119,7 @@ class JanelaPrincipal(Adw.ApplicationWindow):
         self, _action: Gio.SimpleAction, _param: GLib.Variant
     ) -> None:
         self._run_file_dialog(
-            title='Abrir arquivo',
+            title='Importar texto',
             action=Gtk.FileChooserAction.OPEN,
             filter_name='Arquivos de texto (*.txt)',
             filter_pattern='*.txt',
@@ -135,12 +135,9 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             and (path := file.get_path())
         ):
             caminho = Path(path)
-            try:
-                content = caminho.read_text(encoding='utf-8')
-                self._get_active_page().text_editor.set_text(text=content)
-                self._show_toast(mensagem=f'Carregado: {caminho.name}')
-            except Exception as e:
-                self._show_toast(mensagem=f'Erro ao ler arquivo: {e}')
+            content = caminho.read_text(encoding='utf-8')
+            self._get_active_page().text_editor.set_text(text=content)
+            self._show_toast(mensagem=f'Carregado: {caminho.name}')
         dialog.destroy()
 
     def _on_importar_midi_clicked(
@@ -195,11 +192,8 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             and (path := file.get_path())
         ):
             caminho = Path(path)
-            try:
-                caminho.write_text(self._get_active_page().get_text(), encoding='utf-8')
-                self._show_toast(mensagem='Arquivo salvo.')
-            except Exception as e:
-                self._show_toast(mensagem=f'Erro ao salvar: {e}')
+            caminho.write_text(self._get_active_page().get_text(), encoding='utf-8')
+            self._show_toast(mensagem='Texto salvo.')
         dialog.destroy()
 
     def _on_salvar_midi_clicked(
