@@ -4,7 +4,7 @@ from typing import Final, NamedTuple
 
 import mido  # pyright: ignore[reportMissingTypeStubs]
 
-from config import NOTAS_MIDI_BASE
+from config import MIDI_BASE_NOTES
 
 MIN_DURATION_THRESHOLD: Final[float] = 0.01
 DURATION_EPSILON: Final[float] = 1e-5
@@ -32,17 +32,18 @@ class ConversionResult(NamedTuple):
 
 
 class MIDIImporter:
-    """Converts MIDI files into the application's text format, enforcing monophony."""
+    """Converte arquivos MIDI para o formato de texto da aplicação, forçando monofonia."""
 
     def __init__(self) -> None:
         self._pitch_map: dict[int, str] = {
-            v % 12: k for k, v in NOTAS_MIDI_BASE.items()
+            v % 12: k for k, v in MIDI_BASE_NOTES.items()
         }
         self._duration_lookup: list[tuple[float, int, int]] = (
             self._build_duration_table()
         )
 
     def load(self, filepath: Path) -> ConversionResult:
+        """Carrega um arquivo MIDI e retorna o resultado da conversão."""
         mid: mido.MidiFile = mido.MidiFile(filename=filepath)
         ticks_per_beat = mid.ticks_per_beat
 
@@ -77,7 +78,7 @@ class MIDIImporter:
         )
 
     def _get_initial_bpm(self, mid: mido.MidiFile) -> int:
-        """Scan tracks for the first `set_tempo` message."""
+        """Escaneia as faixas em busca da primeira mensagem `set_tempo`."""
         for track in mid.tracks:
             for msg in track:
                 if msg.type == 'set_tempo':
@@ -85,7 +86,7 @@ class MIDIImporter:
         return DEFAULT_BPM
 
     def _parse_track_events(self, mid: mido.MidiFile) -> list[NoteEvent]:
-        """Extract linear events from all tracks."""
+        """Extrai eventos lineares de todas as faixas."""
         events = []
 
         for track in mid.tracks:
@@ -126,9 +127,9 @@ class MIDIImporter:
         return events
 
     def _resolve_monophony(self, events: list[NoteEvent]) -> list[NoteEvent]:
-        """Sorts events and handles overlaps.
+        """Ordena eventos e trata sobreposições.
 
-        Strategy: Melody priority (Highest Pitch) -> Truncate overlaps.
+        Estratégia: Prioridade de melodia (Nota mais aguda) -> Truncar sobreposições.
         """
         events.sort(key=lambda x: (x.start_ticks, -x.pitch))
 
@@ -161,7 +162,7 @@ class MIDIImporter:
     def _transpile_to_text(
         self, events: list[NoteEvent], tpb: int, init_inst: int, init_vol: int
     ) -> str:
-        """Convert cleaned events to the domain-specific string format."""
+        """Converte eventos limpos para o formato de string específico do domínio."""
         parts = []
         curr_ticks = 0
         curr_octave = 5
@@ -213,7 +214,7 @@ class MIDIImporter:
         return ' '.join(parts)
 
     def _build_duration_table(self) -> list[tuple[float, int, int]]:
-        """Create a lookup table for standard note durations."""
+        """Cria uma tabela de consulta para durações de notas padrão."""
         table = []
         base_lengths: list[int] = [1, 2, 4, 8, 16, 32, 64]
 
@@ -226,7 +227,7 @@ class MIDIImporter:
         return table
 
     def _format_duration(self, char: str, beats: float) -> str:
-        """Find closest standard duration using the lookup table."""
+        """Encontra a duração padrão mais próxima usando a tabela de consulta."""
         if beats <= MIN_DURATION_THRESHOLD:
             return ''
 

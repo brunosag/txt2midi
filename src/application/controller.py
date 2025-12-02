@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from domain.events import EventoMusical
+from domain.events import MusicalEvent
 from domain.models import PlaybackSettings
 from domain.parser import ParsingMode, TextParser
 from infrastructure.audio_player import FluidSynthPlayer
@@ -25,15 +25,15 @@ class MusicController:
         on_finished_callback: Callable[[], None] | None = None,
         on_progress_callback: Callable[[int, int], None] | None = None,
     ) -> None:
-        """Parse text and start playback."""
+        """Analisa o texto e inicia a reprodução."""
         self.stop_music()
 
-        eventos: list[EventoMusical] = self.parser.parse(
-            texto=text, settings=settings, mode=mode
+        events: list[MusicalEvent] = self.parser.parse(
+            text=text, settings=settings, mode=mode
         )
         self.current_player = FluidSynthPlayer(
             soundfont_path=soundfont_path,
-            eventos=eventos,
+            events=events,
             settings=settings,
             on_finished_callback=on_finished_callback,
             on_progress_callback=on_progress_callback,
@@ -41,7 +41,7 @@ class MusicController:
         self.current_player.start()
 
     def stop_music(self) -> None:
-        """Stop current playback if active."""
+        """Para a reprodução atual se estiver ativa."""
         if self.current_player and self.current_player.is_alive():
             self.current_player.stop()
             self.current_player.join(timeout=1.0)
@@ -52,14 +52,14 @@ class MusicController:
         text: str,
         settings: PlaybackSettings,
         mode: ParsingMode,
-        filepath: Path,
+        file_path: Path,
     ) -> None:
-        """Parse text and export to MIDI file."""
-        eventos: list[EventoMusical] = self.parser.parse(
-            texto=text, settings=settings, mode=mode
+        """Analisa o texto e exporta para arquivo MIDI."""
+        events: list[MusicalEvent] = self.parser.parse(
+            text=text, settings=settings, mode=mode
         )
-        self.exporter.save(eventos=eventos, caminho_arquivo=filepath)
+        self.exporter.save(events=events, file_path=file_path)
 
-    def import_midi(self, filepath: Path) -> tuple[str, int, int, int]:
-        """Import a MIDI file and convert it to text syntax + settings."""
-        return self.importer.load(filepath)
+    def import_midi(self, file_path: Path) -> tuple[str, int, int, int]:
+        """Importa um arquivo MIDI e converte para sintaxe de texto + configurações."""
+        return self.importer.load(file_path)

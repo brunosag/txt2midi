@@ -21,7 +21,7 @@
 				</context>
 
 				<context id="notes" style-ref="note">
-					<match case-sensitive="false">[A-GH]</match>
+					<match case-sensitive="false">[A-H]</match>
 				</context>
 
 				<context id="vowels" style-ref="vowel">

@@ -2,49 +2,49 @@ from dataclasses import dataclass
 
 
 @dataclass
-class EventoMusical:
+class MusicalEvent:
     """Classe base para todos os eventos musicais."""
 
-    tempo: float
+    time: float
     source_index: int
     source_length: int
 
 
 @dataclass
-class EventoTempo(EventoMusical):
+class TempoEvent(MusicalEvent):
     """Evento de mudança de tempo (BPM)."""
 
     bpm: int
 
 
 @dataclass
-class EventoInstrumento(EventoMusical):
+class InstrumentEvent(MusicalEvent):
     """Evento de mudança de instrumento."""
 
     instrument_id: int
 
 
 @dataclass
-class EventoNota(EventoMusical):
+class NoteEvent(MusicalEvent):
     """Evento de nota musical."""
 
     pitch: int
     volume: int
-    duracao: float
+    duration: float
 
 
 @dataclass
-class EventoNotaEspecifica(EventoMusical):
+class SpecificNoteEvent(MusicalEvent):
     """Evento de nota com instrumento específico."""
 
     instrument_id: int
     pitch: int
     volume: int
-    duracao: float
+    duration: float
 
 
 @dataclass
-class EventoPausa(EventoMusical):
+class RestEvent(MusicalEvent):
     """Evento de pausa (silêncio)."""
 
-    duracao: float
+    duration: float

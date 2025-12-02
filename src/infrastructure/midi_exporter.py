@@ -4,11 +4,11 @@ from pathlib import Path
 from midiutil import MIDIFile
 
 from domain.events import (
-    EventoInstrumento,
-    EventoMusical,
-    EventoNota,
-    EventoNotaEspecifica,
-    EventoTempo,
+    InstrumentEvent,
+    MusicalEvent,
+    NoteEvent,
+    SpecificNoteEvent,
+    TempoEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -19,63 +19,60 @@ class MIDIExporter:
 
     def save(
         self,
-        eventos: list[EventoMusical],
-        caminho_arquivo: Path,
+        events: list[MusicalEvent],
+        file_path: Path,
     ) -> None:
         """Criar o objeto `MIDIFile` e o salvar no disco."""
         midi = MIDIFile(1, deinterleave=False)
 
         track = 0
         channel = 0
-        tempo_inicial_definido = False
-        instrumento_inicial_definido = False
+        initial_tempo_defined = False
+        initial_instrument_defined = False
 
-        for evento in eventos:
-            if isinstance(evento, EventoTempo) and not tempo_inicial_definido:
+        for event in events:
+            if isinstance(event, TempoEvent) and not initial_tempo_defined:
                 midi.addTempo(
                     track=track,
-                    time=evento.tempo,
-                    tempo=evento.bpm,
+                    time=event.time,
+                    tempo=event.bpm,
                 )
-                tempo_inicial_definido = True
+                initial_tempo_defined = True
 
-            elif (
-                isinstance(evento, EventoInstrumento)
-                and not instrumento_inicial_definido
-            ):
+            elif isinstance(event, InstrumentEvent) and not initial_instrument_defined:
                 midi.addProgramChange(
                     tracknum=track,
                     channel=channel,
-                    time=evento.tempo,
-                    program=evento.instrument_id,
+                    time=event.time,
+                    program=event.instrument_id,
                 )
-                instrumento_inicial_definido = True
+                initial_instrument_defined = True
 
-            elif isinstance(evento, (EventoNota, EventoNotaEspecifica)):
+            elif isinstance(event, (NoteEvent, SpecificNoteEvent)):
                 midi.addNote(
                     track=track,
                     channel=channel,
-                    pitch=evento.pitch,
-                    time=evento.tempo,
-                    duration=evento.duracao,
-                    volume=evento.volume,
+                    pitch=event.pitch,
+                    time=event.time,
+                    duration=event.duration,
+                    volume=event.volume,
                 )
 
             # Mudanças de tempo/instrumento no meio da música
-            if isinstance(evento, EventoTempo) and tempo_inicial_definido:
+            if isinstance(event, TempoEvent) and initial_tempo_defined:
                 midi.addTempo(
                     track=track,
-                    time=evento.tempo,
-                    tempo=evento.bpm,
+                    time=event.time,
+                    tempo=event.bpm,
                 )
 
-            if isinstance(evento, EventoInstrumento) and instrumento_inicial_definido:
+            if isinstance(event, InstrumentEvent) and initial_instrument_defined:
                 midi.addProgramChange(
                     tracknum=track,
                     channel=channel,
-                    time=evento.tempo,
-                    program=evento.instrument_id,
+                    time=event.time,
+                    program=event.instrument_id,
                 )
 
-        with caminho_arquivo.open('wb') as output_file:
+        with file_path.open('wb') as output_file:
             midi.writeFile(output_file)

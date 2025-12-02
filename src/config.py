@@ -5,7 +5,7 @@ from typing import Final
 DEFAULT_SOUNDFONT: Final[Path] = Path('soundfont/SGM-V2.01.sf2')
 
 # Mapeamento de notas base (Oitava 5) para números MIDI
-NOTAS_MIDI_BASE: Final[dict[str, int]] = {
+MIDI_BASE_NOTES: Final[dict[str, int]] = {
     'C': 60,
     'D': 62,
     'E': 64,
@@ -17,7 +17,7 @@ NOTAS_MIDI_BASE: Final[dict[str, int]] = {
 }
 
 # Lista completa de Instrumentos General MIDI (0-127)
-INSTRUMENTOS: Final[list[tuple[int, str]]] = [
+INSTRUMENTS: Final[list[tuple[int, str]]] = [
     (0, 'Acoustic Grand Piano'),
     (1, 'Bright Acoustic Piano'),
     (2, 'Electric Grand Piano'),

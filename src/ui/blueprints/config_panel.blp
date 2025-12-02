@@ -15,7 +15,7 @@ template $ConfigPanel : Adw.PreferencesGroup {
     };
   }
 
-  Adw.SpinRow spin_vol {
+  Adw.SpinRow spin_volume {
     title: _("Volume inicial");
     
     adjustment: Adjustment {
@@ -26,7 +26,7 @@ template $ConfigPanel : Adw.PreferencesGroup {
     };
   }
 
-  Adw.SpinRow spin_oitava {
+  Adw.SpinRow spin_octave {
     title: _("Oitava inicial");
 
     adjustment: Adjustment {
@@ -37,22 +37,22 @@ template $ConfigPanel : Adw.PreferencesGroup {
     };
   }
 
-  Adw.ActionRow row_inst {
+  Adw.ActionRow row_instrument {
     title: _("Instrumento inicial");
     activatable: true;
     
     [suffix]
-    Gtk.Box box_inst_wrapper {
+    Gtk.Box box_instrument_wrapper {
       valign: center;
       spacing: 6;
 
-      Gtk.Label lbl_inst_selected {}
+      Gtk.Label lbl_instrument_selected {}
 
       Gtk.Image {
         icon-name: "pan-down-symbolic";
       }
 
-      Gtk.Popover popover_inst {
+      Gtk.Popover popover_instrument {
         autohide: true;
         
         styles ["menu"]
@@ -69,7 +69,7 @@ template $ConfigPanel : Adw.PreferencesGroup {
             margin-end: 6;
           }
 
-          Gtk.Stack stack_inst {
+          Gtk.Stack stack_instrument {
             transition-type: none;
 
             Gtk.StackPage {
@@ -80,7 +80,7 @@ template $ConfigPanel : Adw.PreferencesGroup {
                 propagate-natural-height: true;
                 propagate-natural-width: true;
                 
-                Gtk.ListView list_inst {
+                Gtk.ListView list_instrument {
                   single-click-activate: true;
                 }
               };

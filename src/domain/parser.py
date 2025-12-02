@@ -5,13 +5,13 @@ from collections.abc import Callable
 from enum import StrEnum
 from typing import Final, override
 
-from config import NOTAS_MIDI_BASE
+from config import MIDI_BASE_NOTES
 from domain.events import (
-    EventoInstrumento,
-    EventoMusical,
-    EventoNota,
-    EventoPausa,
-    EventoTempo,
+    InstrumentEvent,
+    MusicalEvent,
+    NoteEvent,
+    RestEvent,
+    TempoEvent,
 )
 from domain.models import ParsingContext, PlaybackSettings
 
@@ -27,7 +27,7 @@ class MusicParser(ABC):
     """Estratégia abstrata para converter texto em eventos musicais."""
 
     @abstractmethod
-    def parse(self, texto: str, settings: PlaybackSettings) -> list[EventoMusical]:
+    def parse(self, text: str, settings: PlaybackSettings) -> list[MusicalEvent]:
         """Converte o texto de entrada em uma lista de eventos musicais."""
 
 
@@ -50,34 +50,34 @@ class MMLParser(MusicParser):
     )
 
     @override
-    def parse(self, texto: str, settings: PlaybackSettings) -> list[EventoMusical]:
+    def parse(self, text: str, settings: PlaybackSettings) -> list[MusicalEvent]:
         context = ParsingContext(settings)
-        eventos = self._initialize_events(context)
+        events = self._initialize_events(context)
 
         pos = 0
-        text_len = len(texto)
+        text_len = len(text)
 
         while pos < text_len:
-            match = self.TOKEN_REGEX_MML.match(texto, pos)
+            match = self.TOKEN_REGEX_MML.match(text, pos)
             if not match:
                 pos += 1
                 continue
 
-            pos = self._process_token(match, texto, pos, context, eventos)
+            pos = self._process_token(match, text, pos, context, events)
 
-        return eventos
+        return events
 
-    def _initialize_events(self, context: ParsingContext) -> list[EventoMusical]:
+    def _initialize_events(self, context: ParsingContext) -> list[MusicalEvent]:
         """Cria a lista inicial de eventos com configurações padrão."""
         return [
-            EventoTempo(
-                tempo=0.0,
+            TempoEvent(
+                time=0.0,
                 bpm=context.bpm,
                 source_index=0,
                 source_length=0,
             ),
-            EventoInstrumento(
-                tempo=0.0,
+            InstrumentEvent(
+                time=0.0,
                 instrument_id=context.instrument_id,
                 source_index=0,
                 source_length=0,
@@ -90,7 +90,7 @@ class MMLParser(MusicParser):
         text: str,
         pos: int,
         context: ParsingContext,
-        eventos: list[EventoMusical],
+        events: list[MusicalEvent],
     ) -> int:
         """Despacha o token encontrado para o manipulador correto."""
         token_type = match.lastgroup
@@ -99,11 +99,11 @@ class MMLParser(MusicParser):
 
         match token_type:
             case 'note':
-                return self._handle_note(match, text, pos, context, eventos)
+                return self._handle_note(match, text, pos, context, events)
             case 'rest':
-                return self._handle_rest(match, text, pos, context, eventos)
+                return self._handle_rest(match, text, pos, context, events)
             case 'octave_set' | 'length_set' | 'tempo' | 'volume' | 'instrument':
-                return self._handle_setting(match, text, pos, context, eventos)
+                return self._handle_setting(match, text, pos, context, events)
             case 'octave_up' | 'octave_down':
                 return self._handle_octave_shift(match, context)
             case _:
@@ -115,7 +115,7 @@ class MMLParser(MusicParser):
         text: str,
         start_idx: int,
         context: ParsingContext,
-        eventos: list[EventoMusical],
+        events: list[MusicalEvent],
     ) -> int:
         curr_pos = match.end()
         duration, new_pos = self._calculate_duration(text, curr_pos, context)
@@ -124,7 +124,7 @@ class MMLParser(MusicParser):
         base_char = token_str[0].upper()
         accidental = token_str[1] if len(token_str) > 1 else None
 
-        pitch = NOTAS_MIDI_BASE.get(base_char, 60)
+        pitch = MIDI_BASE_NOTES.get(base_char, 60)
         if accidental in ('#', '+'):
             pitch += 1
         elif accidental in ('b', '-'):
@@ -133,17 +133,17 @@ class MMLParser(MusicParser):
         pitch += (context.octave - 5) * 12
         pitch = max(0, min(127, pitch))
 
-        eventos.append(
-            EventoNota(
-                tempo=context.tempo_evento,
+        events.append(
+            NoteEvent(
+                time=context.event_time,
                 pitch=pitch,
                 volume=context.volume,
-                duracao=duration,
+                duration=duration,
                 source_index=start_idx,
                 source_length=new_pos - start_idx,
             )
         )
-        context.tempo_evento += duration
+        context.event_time += duration
         return new_pos
 
     def _handle_rest(
@@ -152,20 +152,20 @@ class MMLParser(MusicParser):
         text: str,
         start_idx: int,
         context: ParsingContext,
-        eventos: list[EventoMusical],
+        events: list[MusicalEvent],
     ) -> int:
         curr_pos = match.end()
         duration, new_pos = self._calculate_duration(text, curr_pos, context)
 
-        eventos.append(
-            EventoPausa(
-                tempo=context.tempo_evento,
-                duracao=duration,
+        events.append(
+            RestEvent(
+                time=context.event_time,
+                duration=duration,
                 source_index=start_idx,
                 source_length=new_pos - start_idx,
             )
         )
-        context.tempo_evento += duration
+        context.event_time += duration
         return new_pos
 
     def _handle_setting(
@@ -174,7 +174,7 @@ class MMLParser(MusicParser):
         text: str,
         start_idx: int,
         context: ParsingContext,
-        eventos: list[EventoMusical],
+        events: list[MusicalEvent],
     ) -> int:
         token_type = match.lastgroup
         curr_pos = match.end()
@@ -188,9 +188,9 @@ class MMLParser(MusicParser):
                 context.default_length = max(1, val)
             case 'tempo':
                 context.bpm = max(1, val)
-                eventos.append(
-                    EventoTempo(
-                        tempo=context.tempo_evento,
+                events.append(
+                    TempoEvent(
+                        time=context.event_time,
                         bpm=context.bpm,
                         source_index=start_idx,
                         source_length=length,
@@ -200,9 +200,9 @@ class MMLParser(MusicParser):
                 context.volume = max(0, min(val, 127))
             case 'instrument':
                 context.instrument_id = max(0, min(val, 127))
-                eventos.append(
-                    EventoInstrumento(
-                        tempo=context.tempo_evento,
+                events.append(
+                    InstrumentEvent(
+                        time=context.event_time,
                         instrument_id=context.instrument_id,
                         source_index=start_idx,
                         source_length=length,
@@ -266,41 +266,39 @@ class StandardParser(MusicParser):
         self.dispatch_table: dict[
             str,
             Callable[
-                [str, int, ParsingContext, list[EventoMusical], int | None],
+                [str, int, ParsingContext, list[MusicalEvent], int | None],
                 tuple[int | None, int],
             ],
         ] = self._build_dispatch_table()
 
     @override
-    def parse(self, texto: str, settings: PlaybackSettings) -> list[EventoMusical]:
+    def parse(self, text: str, settings: PlaybackSettings) -> list[MusicalEvent]:
         context = ParsingContext(settings)
-        eventos = self._initialize_events(context)
+        events = self._initialize_events(context)
 
         last_note_pitch: int | None = None
         pos = 0
-        text_len = len(texto)
+        text_len = len(text)
 
         while pos < text_len:
-            char = texto[pos]
+            char = text[pos]
             upper_char = char.upper()
 
             handler = self.dispatch_table.get(upper_char, self._handle_default)
-            last_note_pitch, pos = handler(
-                texto, pos, context, eventos, last_note_pitch
-            )
+            last_note_pitch, pos = handler(text, pos, context, events, last_note_pitch)
 
-        return eventos
+        return events
 
-    def _initialize_events(self, context: ParsingContext) -> list[EventoMusical]:
+    def _initialize_events(self, context: ParsingContext) -> list[MusicalEvent]:
         return [
-            EventoTempo(
-                tempo=0.0,
+            TempoEvent(
+                time=0.0,
                 bpm=context.bpm,
                 source_index=0,
                 source_length=0,
             ),
-            EventoInstrumento(
-                tempo=0.0,
+            InstrumentEvent(
+                time=0.0,
                 instrument_id=context.instrument_id,
                 source_index=0,
                 source_length=0,
@@ -332,16 +330,16 @@ class StandardParser(MusicParser):
         _text: str,
         pos: int,
         context: ParsingContext,
-        eventos: list[EventoMusical],
+        events: list[MusicalEvent],
         last_pitch: int | None,
     ) -> tuple[int | None, int]:
         """Estende a duração da última nota, se houver."""
-        for i in range(len(eventos) - 1, -1, -1):
-            ev = eventos[i]
-            if isinstance(ev, EventoNota):
-                ev.duracao += self.NOTE_DURATION
+        for i in range(len(events) - 1, -1, -1):
+            ev = events[i]
+            if isinstance(ev, NoteEvent):
+                ev.duration += self.NOTE_DURATION
                 ev.source_length += 1
-                context.tempo_evento += self.NOTE_DURATION
+                context.event_time += self.NOTE_DURATION
                 return last_pitch, pos + 1
 
         return last_pitch, pos + 1
@@ -351,25 +349,25 @@ class StandardParser(MusicParser):
         text: str,
         pos: int,
         context: ParsingContext,
-        eventos: list[EventoMusical],
+        events: list[MusicalEvent],
         _last_pitch: int | None,
     ) -> tuple[int, int]:
         char = text[pos].upper()
-        pitch = 70 if char == 'H' else NOTAS_MIDI_BASE.get(char, 60)
+        pitch = 70 if char == 'H' else MIDI_BASE_NOTES.get(char, 60)
         pitch += (context.octave - 5) * 12
         pitch = max(0, min(127, pitch))
 
-        eventos.append(
-            EventoNota(
-                tempo=context.tempo_evento,
+        events.append(
+            NoteEvent(
+                time=context.event_time,
                 pitch=pitch,
                 volume=context.volume,
-                duracao=self.NOTE_DURATION,
+                duration=self.NOTE_DURATION,
                 source_index=pos,
                 source_length=1,
             )
         )
-        context.tempo_evento += self.NOTE_DURATION
+        context.event_time += self.NOTE_DURATION
         return pitch, pos + 1
 
     def _handle_b_context(
@@ -377,15 +375,15 @@ class StandardParser(MusicParser):
         text: str,
         pos: int,
         context: ParsingContext,
-        eventos: list[EventoMusical],
+        events: list[MusicalEvent],
         last_pitch: int | None,
     ) -> tuple[int | None, int]:
         """Trata o caso ambíguo do 'B': Nota B ou comando BPM+."""
         if text.startswith('BPM+', pos):
             context.bpm += 80
-            eventos.append(
-                EventoTempo(
-                    tempo=context.tempo_evento,
+            events.append(
+                TempoEvent(
+                    time=context.event_time,
                     bpm=context.bpm,
                     source_index=pos,
                     source_length=4,
@@ -393,53 +391,53 @@ class StandardParser(MusicParser):
             )
             return last_pitch, pos + 4
 
-        return self._handle_note(text, pos, context, eventos, last_pitch)
+        return self._handle_note(text, pos, context, events, last_pitch)
 
     def _handle_vowel(
         self,
         _text: str,
         pos: int,
         context: ParsingContext,
-        eventos: list[EventoMusical],
+        events: list[MusicalEvent],
         last_pitch: int | None,
     ) -> tuple[int | None, int]:
         current_pitch = last_pitch
 
         if last_pitch is not None:
-            eventos.append(
-                EventoNota(
-                    tempo=context.tempo_evento,
+            events.append(
+                NoteEvent(
+                    time=context.event_time,
                     pitch=last_pitch,
                     volume=context.volume,
-                    duracao=self.NOTE_DURATION,
+                    duration=self.NOTE_DURATION,
                     source_index=pos,
                     source_length=1,
                 )
             )
         else:
             context.instrument_id = 124  # Telefone (GM 124)
-            eventos.append(
-                EventoInstrumento(
-                    tempo=context.tempo_evento,
+            events.append(
+                InstrumentEvent(
+                    time=context.event_time,
                     instrument_id=124,
                     source_index=pos,
                     source_length=0,
                 )
             )
             note_pitch = 60
-            eventos.append(
-                EventoNota(
-                    tempo=context.tempo_evento,
+            events.append(
+                NoteEvent(
+                    time=context.event_time,
                     pitch=note_pitch,
                     volume=context.volume,
-                    duracao=self.NOTE_DURATION,
+                    duration=self.NOTE_DURATION,
                     source_index=pos,
                     source_length=1,
                 )
             )
             current_pitch = note_pitch
 
-        context.tempo_evento += self.NOTE_DURATION
+        context.event_time += self.NOTE_DURATION
         return current_pitch if current_pitch is not None else 60, pos + 1
 
     def _handle_octave_up(
@@ -447,7 +445,7 @@ class StandardParser(MusicParser):
         _text: str,
         pos: int,
         context: ParsingContext,
-        _eventos: list[EventoMusical],
+        _events: list[MusicalEvent],
         last_pitch: int | None,
     ) -> tuple[int | None, int]:
         context.octave = min(context.octave + 1, 10)
@@ -458,7 +456,7 @@ class StandardParser(MusicParser):
         _text: str,
         pos: int,
         context: ParsingContext,
-        _eventos: list[EventoMusical],
+        _events: list[MusicalEvent],
         last_pitch: int | None,
     ) -> tuple[int | None, int]:
         context.octave = max(context.octave - 1, 0)
@@ -469,7 +467,7 @@ class StandardParser(MusicParser):
         _text: str,
         pos: int,
         context: ParsingContext,
-        _eventos: list[EventoMusical],
+        _events: list[MusicalEvent],
         last_pitch: int | None,
     ) -> tuple[int | None, int]:
         new_vol = context.volume * 2
@@ -481,24 +479,24 @@ class StandardParser(MusicParser):
         _text: str,
         pos: int,
         context: ParsingContext,
-        eventos: list[EventoMusical],
+        events: list[MusicalEvent],
         _last_pitch: int | None,
     ) -> tuple[int, int]:
-        random_note = random.choice(list(NOTAS_MIDI_BASE.values()))
+        random_note = random.choice(list(MIDI_BASE_NOTES.values()))
         pitch = random_note + ((context.octave - 5) * 12)
         pitch = max(0, min(127, pitch))
 
-        eventos.append(
-            EventoNota(
-                tempo=context.tempo_evento,
+        events.append(
+            NoteEvent(
+                time=context.event_time,
                 pitch=pitch,
                 volume=context.volume,
-                duracao=self.NOTE_DURATION,
+                duration=self.NOTE_DURATION,
                 source_index=pos,
                 source_length=1,
             )
         )
-        context.tempo_evento += self.NOTE_DURATION
+        context.event_time += self.NOTE_DURATION
         return pitch, pos + 1
 
     def _handle_newline(
@@ -506,13 +504,13 @@ class StandardParser(MusicParser):
         _text: str,
         pos: int,
         context: ParsingContext,
-        eventos: list[EventoMusical],
+        events: list[MusicalEvent],
         last_pitch: int | None,
     ) -> tuple[int | None, int]:
         context.instrument_id = random.randint(0, 127)
-        eventos.append(
-            EventoInstrumento(
-                tempo=context.tempo_evento,
+        events.append(
+            InstrumentEvent(
+                time=context.event_time,
                 instrument_id=context.instrument_id,
                 source_index=pos,
                 source_length=1,
@@ -525,18 +523,18 @@ class StandardParser(MusicParser):
         _text: str,
         pos: int,
         context: ParsingContext,
-        eventos: list[EventoMusical],
+        events: list[MusicalEvent],
         last_pitch: int | None,
     ) -> tuple[int | None, int]:
-        eventos.append(
-            EventoPausa(
-                tempo=context.tempo_evento,
-                duracao=self.NOTE_DURATION,
+        events.append(
+            RestEvent(
+                time=context.event_time,
+                duration=self.NOTE_DURATION,
                 source_index=pos,
                 source_length=1,
             )
         )
-        context.tempo_evento += self.NOTE_DURATION
+        context.event_time += self.NOTE_DURATION
         return last_pitch, pos + 1
 
 
@@ -544,12 +542,12 @@ class TextParser:
     """Facade para selecionar a estratégia de parsing apropriada."""
 
     def parse(
-        self, texto: str, settings: PlaybackSettings, mode: ParsingMode
-    ) -> list[EventoMusical]:
+        self, text: str, settings: PlaybackSettings, mode: ParsingMode
+    ) -> list[MusicalEvent]:
         match mode:
             case ParsingMode.STANDARD:
                 strategy = StandardParser()
             case ParsingMode.MML:
                 strategy = MMLParser()
 
-        return strategy.parse(texto, settings)
+        return strategy.parse(text, settings)

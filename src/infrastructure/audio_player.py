@@ -9,11 +9,11 @@ import fluidsynth
 from gi.repository import GLib  # pyright: ignore[reportMissingModuleSource]
 
 from domain.events import (
-    EventoInstrumento,
-    EventoMusical,
-    EventoNota,
-    EventoNotaEspecifica,
-    EventoTempo,
+    InstrumentEvent,
+    MusicalEvent,
+    NoteEvent,
+    SpecificNoteEvent,
+    TempoEvent,
 )
 from domain.models import PlaybackSettings
 
@@ -27,7 +27,7 @@ class FluidSynthPlayer(threading.Thread):
     def __init__(
         self,
         soundfont_path: Path,
-        eventos: list[EventoMusical],
+        events: list[MusicalEvent],
         settings: PlaybackSettings,
         on_finished_callback: Callable[[], None] | None = None,
         on_progress_callback: Callable[[int, int], None] | None = None,
@@ -35,52 +35,50 @@ class FluidSynthPlayer(threading.Thread):
         super().__init__()
         self.fs: fluidsynth.Synth = fluidsynth.Synth()
         self.soundfont_path: Path = soundfont_path
-        self.eventos: list[EventoMusical] = eventos
+        self.events: list[MusicalEvent] = events
         self.settings: PlaybackSettings = settings
-        self._parar_requisicao: threading.Event = threading.Event()
-        self.callback_parada: Callable[[], None] | None = on_finished_callback
-        self.callback_progresso: Callable[[int, int], None] | None = (
-            on_progress_callback
-        )
+        self._stop_request: threading.Event = threading.Event()
+        self.stop_callback: Callable[[], None] | None = on_finished_callback
+        self.progress_callback: Callable[[int, int], None] | None = on_progress_callback
         self.timers: list[threading.Timer] = []
 
     @override
     def run(self) -> None:
-        self._inicializar_fluidsynth()
+        self._initialize_fluidsynth()
 
         channel = 0
-        bpm_atual = float(self.settings.bpm)
-        if bpm_atual <= 0:
-            bpm_atual = 120.0
+        current_bpm = float(self.settings.bpm)
+        if current_bpm <= 0:
+            current_bpm = 120.0
 
-        instrumento_id_atual = self._configurar_instrumento_inicial(channel)
-        tempo_evento_anterior = 0.0
+        current_instrument_id = self._configure_initial_instrument(channel)
+        previous_event_time = 0.0
 
-        for evento in self.eventos:
-            if self._parar_requisicao.is_set():
+        for event in self.events:
+            if self._stop_request.is_set():
                 break
 
-            tempo = evento.tempo
-            self._aguardar_tempo(tempo, tempo_evento_anterior, bpm_atual)
+            event_time = event.time
+            self._wait_time(event_time, previous_event_time, current_bpm)
 
-            if self.callback_progresso:
+            if self.progress_callback:
                 GLib.idle_add(
-                    self.callback_progresso, evento.source_index, evento.source_length
+                    self.progress_callback, event.source_index, event.source_length
                 )
 
-            if self._parar_requisicao.is_set():
+            if self._stop_request.is_set():
                 break
 
-            bpm_atual, instrumento_id_atual = self._processar_evento(
-                evento,
+            current_bpm, current_instrument_id = self._process_event(
+                event,
                 channel,
-                bpm_atual,
-                instrumento_id_atual,
+                current_bpm,
+                current_instrument_id,
             )
 
-            tempo_evento_anterior = tempo
+            previous_event_time = event_time
 
-        if self._parar_requisicao.is_set():
+        if self._stop_request.is_set():
             for timer in self.timers:
                 timer.cancel()
         else:
@@ -88,17 +86,17 @@ class FluidSynthPlayer(threading.Thread):
                 timer.join()
 
         self.fs.delete()
-        _ = GLib.idle_add(self.notificar_parada_main_thread)
+        _ = GLib.idle_add(self.notify_stop_main_thread)
 
-    def _inicializar_fluidsynth(self) -> None:
+    def _initialize_fluidsynth(self) -> None:
         self.fs.start()
         self.fs.sfload(str(self.soundfont_path))
 
-    def _configurar_instrumento_inicial(self, channel: int) -> int:
+    def _configure_initial_instrument(self, channel: int) -> int:
         instrument_id = -1
-        for evento in self.eventos:
-            if isinstance(evento, EventoInstrumento):
-                instrument_id = evento.instrument_id
+        for event in self.events:
+            if isinstance(event, InstrumentEvent):
+                instrument_id = event.instrument_id
                 break
 
         if instrument_id == -1:
@@ -107,96 +105,96 @@ class FluidSynthPlayer(threading.Thread):
         self.fs.program_change(chan=channel, prg=instrument_id)
         return instrument_id
 
-    def _aguardar_tempo(
+    def _wait_time(
         self,
-        tempo_atual: float,
-        tempo_anterior: float,
+        current_time: float,
+        previous_time: float,
         bpm: float,
     ) -> None:
-        delta_batidas = tempo_atual - tempo_anterior
+        beat_delta = current_time - previous_time
         safe_bpm = max(1.0, bpm)
-        if delta_batidas > 0:
-            segundos_espera = (60.0 / safe_bpm) * delta_batidas
-            time.sleep(segundos_espera)
+        if beat_delta > 0:
+            wait_seconds = (60.0 / safe_bpm) * beat_delta
+            time.sleep(wait_seconds)
 
-    def _processar_evento(
+    def _process_event(
         self,
-        evento: EventoMusical,
+        event: MusicalEvent,
         channel: int,
-        bpm_atual: float,
-        instrumento_id_atual: int,
+        current_bpm: float,
+        current_instrument_id: int,
     ) -> tuple[float, int]:
-        if isinstance(evento, EventoTempo):
-            novo_bpm = float(evento.bpm)
-            return (novo_bpm if novo_bpm > 0 else 120.0), instrumento_id_atual
+        if isinstance(event, TempoEvent):
+            new_bpm = float(event.bpm)
+            return (new_bpm if new_bpm > 0 else 120.0), current_instrument_id
 
-        if isinstance(evento, EventoInstrumento):
-            self.fs.program_change(chan=channel, prg=evento.instrument_id)
-            return bpm_atual, evento.instrument_id
+        if isinstance(event, InstrumentEvent):
+            self.fs.program_change(chan=channel, prg=event.instrument_id)
+            return current_bpm, event.instrument_id
 
-        if isinstance(evento, EventoNota):
-            self._tocar_nota(channel=channel, evento=evento, bpm_atual=bpm_atual)
+        if isinstance(event, NoteEvent):
+            self._play_note(channel=channel, event=event, current_bpm=current_bpm)
 
-        elif isinstance(evento, EventoNotaEspecifica):
-            self._tocar_nota_especifica(
+        elif isinstance(event, SpecificNoteEvent):
+            self._play_specific_note(
                 channel=channel,
-                evento=evento,
-                bpm_atual=bpm_atual,
-                instrumento_original=instrumento_id_atual,
+                event=event,
+                current_bpm=current_bpm,
+                original_instrument=current_instrument_id,
             )
 
-        return bpm_atual, instrumento_id_atual
+        return current_bpm, current_instrument_id
 
-    def _tocar_nota(
+    def _play_note(
         self,
         channel: int,
-        evento: EventoNota,
-        bpm_atual: float,
+        event: NoteEvent,
+        current_bpm: float,
     ) -> None:
-        safe_bpm = max(1.0, bpm_atual)
-        duracao_seg = (60.0 / safe_bpm) * evento.duracao
+        safe_bpm = max(1.0, current_bpm)
+        duration_sec = (60.0 / safe_bpm) * event.duration
 
-        self.fs.noteon(chan=channel, key=evento.pitch, vel=evento.volume)
+        self.fs.noteon(chan=channel, key=event.pitch, vel=event.volume)
 
         self.timers = [t for t in self.timers if t.is_alive()]
 
         timer = threading.Timer(
-            duracao_seg,
+            duration_sec,
             self.fs.noteoff,
-            args=[channel, evento.pitch],
+            args=[channel, event.pitch],
         )
         self.timers.append(timer)
         timer.start()
 
-    def _tocar_nota_especifica(
+    def _play_specific_note(
         self,
         channel: int,
-        evento: EventoNotaEspecifica,
-        bpm_atual: float,
-        instrumento_original: int,
+        event: SpecificNoteEvent,
+        current_bpm: float,
+        original_instrument: int,
     ) -> None:
-        safe_bpm = max(1.0, bpm_atual)
-        duracao_seg = (60.0 / safe_bpm) * evento.duracao
+        safe_bpm = max(1.0, current_bpm)
+        duration_sec = (60.0 / safe_bpm) * event.duration
 
-        self.fs.program_change(channel, evento.instrument_id)
-        self.fs.noteon(channel, evento.pitch, evento.volume)
-        self.fs.program_change(channel, instrumento_original)
+        self.fs.program_change(channel, event.instrument_id)
+        self.fs.noteon(channel, event.pitch, event.volume)
+        self.fs.program_change(channel, original_instrument)
 
         self.timers = [t for t in self.timers if t.is_alive()]
 
         timer = threading.Timer(
-            duracao_seg,
+            duration_sec,
             self.fs.noteoff,
-            args=[channel, evento.pitch],
+            args=[channel, event.pitch],
         )
         self.timers.append(timer)
         timer.start()
 
     def stop(self) -> None:
         """Sinalizar a thread para parar."""
-        self._parar_requisicao.set()
+        self._stop_request.set()
 
-    def notificar_parada_main_thread(self) -> None:
+    def notify_stop_main_thread(self) -> None:
         """Notificar a thread principal que a música terminou."""
-        if self.callback_parada:
-            self.callback_parada()
+        if self.stop_callback:
+            self.stop_callback()

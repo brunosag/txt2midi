@@ -22,7 +22,7 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
       </object>
     </child>
     <child>
-      <object class="AdwSpinRow" id="spin_vol">
+      <object class="AdwSpinRow" id="spin_volume">
         <property name="title" translatable="yes">Volume inicial</property>
         <property name="adjustment">
           <object class="GtkAdjustment">
@@ -35,7 +35,7 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
       </object>
     </child>
     <child>
-      <object class="AdwSpinRow" id="spin_oitava">
+      <object class="AdwSpinRow" id="spin_octave">
         <property name="title" translatable="yes">Oitava inicial</property>
         <property name="adjustment">
           <object class="GtkAdjustment">
@@ -48,15 +48,15 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
       </object>
     </child>
     <child>
-      <object class="AdwActionRow" id="row_inst">
+      <object class="AdwActionRow" id="row_instrument">
         <property name="title" translatable="yes">Instrumento inicial</property>
         <property name="activatable">true</property>
         <child type="suffix">
-          <object class="GtkBox" id="box_inst_wrapper">
+          <object class="GtkBox" id="box_instrument_wrapper">
             <property name="valign">3</property>
             <property name="spacing">6</property>
             <child>
-              <object class="GtkLabel" id="lbl_inst_selected"></object>
+              <object class="GtkLabel" id="lbl_instrument_selected"></object>
             </child>
             <child>
               <object class="GtkImage">
@@ -64,7 +64,7 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
               </object>
             </child>
             <child>
-              <object class="GtkPopover" id="popover_inst">
+              <object class="GtkPopover" id="popover_instrument">
                 <property name="autohide">true</property>
                 <style>
                   <class name="menu"/>
@@ -83,7 +83,7 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
                       </object>
                     </child>
                     <child>
-                      <object class="GtkStack" id="stack_inst">
+                      <object class="GtkStack" id="stack_instrument">
                         <property name="transition-type">0</property>
                         <child>
                           <object class="GtkStackPage">
@@ -95,7 +95,7 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
                                 <property name="propagate-natural-height">true</property>
                                 <property name="propagate-natural-width">true</property>
                                 <child>
-                                  <object class="GtkListView" id="list_inst">
+                                  <object class="GtkListView" id="list_instrument">
                                     <property name="single-click-activate">true</property>
                                   </object>
                                 </child>

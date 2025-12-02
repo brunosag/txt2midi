@@ -19,13 +19,13 @@ from gi.repository import (  # noqa: E402
 
 
 @Gtk.Template(filename='src/ui/blueprints/main_window.ui')
-class JanelaPrincipal(Adw.ApplicationWindow):
-    __gtype_name__ = 'JanelaPrincipal'
+class MainWindow(Adw.ApplicationWindow):
+    __gtype_name__ = 'MainWindow'
 
     toast_overlay = Gtk.Template.Child()
     view_stack = Gtk.Template.Child()
-    btn_tocar = Gtk.Template.Child()
-    btn_parar = Gtk.Template.Child()
+    btn_play = Gtk.Template.Child()
+    btn_stop = Gtk.Template.Child()
 
     page_standard = Gtk.Template.Child()
     page_mml = Gtk.Template.Child()
@@ -41,13 +41,13 @@ class JanelaPrincipal(Adw.ApplicationWindow):
         self.page_mml.text_editor.set_language_id('mml')
         self.page_mml.text_editor.set_text('T120 I19 C D E F')
 
-        self._add_action(name='abrir_txt', callback=self._on_abrir_txt_clicked)
-        self._add_action(name='importar_midi', callback=self._on_importar_midi_clicked)
-        self._add_action(name='salvar_txt', callback=self._on_salvar_txt_clicked)
-        self._add_action(name='salvar_midi', callback=self._on_salvar_midi_clicked)
+        self._add_action(name='open_txt', callback=self._on_open_txt_clicked)
+        self._add_action(name='import_midi', callback=self._on_import_midi_clicked)
+        self._add_action(name='save_txt', callback=self._on_save_txt_clicked)
+        self._add_action(name='save_midi', callback=self._on_save_midi_clicked)
 
-        self.btn_tocar.connect('clicked', self._on_tocar_clicked)
-        self.btn_parar.connect('clicked', self._on_parar_clicked)
+        self.btn_play.connect('clicked', self._on_play_clicked)
+        self.btn_stop.connect('clicked', self._on_stop_clicked)
 
         GLib.idle_add(self.set_focus, None)
 
@@ -65,7 +65,7 @@ class JanelaPrincipal(Adw.ApplicationWindow):
     def _get_active_mode(self) -> ParsingMode:
         return cast('ParsingMode', self.view_stack.get_visible_child_name())
 
-    def _on_tocar_clicked(self, _widget: Gtk.Button) -> None:
+    def _on_play_clicked(self, _widget: Gtk.Button) -> None:
         page: EditorPage = self._get_active_page()
         mode: ParsingMode = self._get_active_mode()
 
@@ -74,19 +74,19 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             settings=page.get_settings(),
             mode=mode,
             soundfont_path=page.get_soundfont_path(),
-            on_finished_callback=self._on_playback_terminado,
+            on_finished_callback=self._on_playback_finished,
             on_progress_callback=page.text_editor.highlight_range,
         )
-        self.btn_tocar.set_sensitive(sensitive=False)
-        self.btn_parar.set_sensitive(sensitive=True)
+        self.btn_play.set_sensitive(sensitive=False)
+        self.btn_stop.set_sensitive(sensitive=True)
         page.text_editor.set_editable(editable=False)
 
-    def _on_parar_clicked(self, _widget: Gtk.Button) -> None:
+    def _on_stop_clicked(self, _widget: Gtk.Button) -> None:
         self.controller.stop_music()
 
-    def _on_playback_terminado(self) -> None:
-        self.btn_tocar.set_sensitive(sensitive=True)
-        self.btn_parar.set_sensitive(sensitive=False)
+    def _on_playback_finished(self) -> None:
+        self.btn_play.set_sensitive(sensitive=True)
+        self.btn_stop.set_sensitive(sensitive=False)
         self._get_active_page().text_editor.set_editable(editable=True)
 
     def _run_file_dialog(
@@ -115,7 +115,7 @@ class JanelaPrincipal(Adw.ApplicationWindow):
         _ = dialog.connect('response', callback)
         dialog.show()
 
-    def _on_abrir_txt_clicked(
+    def _on_open_txt_clicked(
         self, _action: Gio.SimpleAction, _param: GLib.Variant
     ) -> None:
         self._run_file_dialog(
@@ -123,10 +123,10 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             action=Gtk.FileChooserAction.OPEN,
             filter_name='Arquivos de texto (*.txt)',
             filter_pattern='*.txt',
-            callback=self._on_abrir_txt_response,
+            callback=self._on_open_txt_response,
         )
 
-    def _on_abrir_txt_response(
+    def _on_open_txt_response(
         self, dialog: Gtk.FileChooserDialog, response: Gtk.ResponseType
     ) -> None:
         if (
@@ -134,13 +134,13 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             and (file := dialog.get_file())
             and (path := file.get_path())
         ):
-            caminho = Path(path)
-            content = caminho.read_text(encoding='utf-8')
+            file_path = Path(path)
+            content = file_path.read_text(encoding='utf-8')
             self._get_active_page().text_editor.set_text(text=content)
-            self._show_toast(mensagem=f'Carregado: {caminho.name}')
+            self._show_toast(message=f'Carregado: {file_path.name}')
         dialog.destroy()
 
-    def _on_importar_midi_clicked(
+    def _on_import_midi_clicked(
         self, _action: Gio.SimpleAction, _param: GLib.Variant
     ) -> None:
         self._run_file_dialog(
@@ -148,10 +148,10 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             action=Gtk.FileChooserAction.OPEN,
             filter_name='Arquivos MIDI (*.mid, *.midi)',
             filter_pattern='*.mid',
-            callback=self._on_importar_midi_response,
+            callback=self._on_import_midi_response,
         )
 
-    def _on_importar_midi_response(
+    def _on_import_midi_response(
         self, dialog: Gtk.FileChooserDialog, response: Gtk.ResponseType
     ) -> None:
         if (
@@ -159,20 +159,20 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             and (file := dialog.get_file())
             and (path := file.get_path())
         ):
-            texto, inst, vol, bpm = self.controller.import_midi(filepath=Path(path))
+            text, inst, vol, bpm = self.controller.import_midi(file_path=Path(path))
 
             self.view_stack.set_visible_child_name(name='mml')
             page: EditorPage = self.page_mml
 
-            page.text_editor.set_text(text=texto)
+            page.text_editor.set_text(text=text)
             page.config_panel.set_instrument(instrument_id=inst)
             page.config_panel.set_volume(volume=vol)
             page.config_panel.set_bpm(bpm=bpm)
 
-            self._show_toast(mensagem='MIDI importado.')
+            self._show_toast(message='MIDI importado.')
         dialog.destroy()
 
-    def _on_salvar_txt_clicked(
+    def _on_save_txt_clicked(
         self, _action: Gio.SimpleAction, _param: GLib.Variant
     ) -> None:
         self._run_file_dialog(
@@ -180,10 +180,10 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             action=Gtk.FileChooserAction.SAVE,
             filter_name='Arquivos de texto (*.txt)',
             filter_pattern='*.txt',
-            callback=self._on_salvar_txt_response,
+            callback=self._on_save_txt_response,
         )
 
-    def _on_salvar_txt_response(
+    def _on_save_txt_response(
         self, dialog: Gtk.FileChooserDialog, response: Gtk.ResponseType
     ) -> None:
         if (
@@ -191,12 +191,12 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             and (file := dialog.get_file())
             and (path := file.get_path())
         ):
-            caminho = Path(path)
-            caminho.write_text(self._get_active_page().get_text(), encoding='utf-8')
-            self._show_toast(mensagem='Texto salvo.')
+            file_path = Path(path)
+            file_path.write_text(self._get_active_page().get_text(), encoding='utf-8')
+            self._show_toast(message='Texto salvo.')
         dialog.destroy()
 
-    def _on_salvar_midi_clicked(
+    def _on_save_midi_clicked(
         self, _action: Gio.SimpleAction, _param: GLib.Variant
     ) -> None:
         self._run_file_dialog(
@@ -204,10 +204,10 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             action=Gtk.FileChooserAction.SAVE,
             filter_name='Arquivos MIDI (*.mid, *.midi)',
             filter_pattern='*.mid',
-            callback=self._on_salvar_midi_response,
+            callback=self._on_save_midi_response,
         )
 
-    def _on_salvar_midi_response(
+    def _on_save_midi_response(
         self, dialog: Gtk.FileChooserDialog, response: Gtk.ResponseType
     ) -> None:
         if (
@@ -215,34 +215,34 @@ class JanelaPrincipal(Adw.ApplicationWindow):
             and (file := dialog.get_file())
             and (path := file.get_path())
         ):
-            caminho = Path(path)
-            if caminho.suffix not in ['.mid', '.midi']:
-                caminho = caminho.with_suffix(suffix='.mid')
+            file_path = Path(path)
+            if file_path.suffix not in ['.mid', '.midi']:
+                file_path = file_path.with_suffix(suffix='.mid')
 
             page: EditorPage = self._get_active_page()
             self.controller.export_midi(
                 text=page.get_text(),
                 settings=page.get_settings(),
                 mode=self._get_active_mode(),
-                filepath=caminho,
+                file_path=file_path,
             )
-            self._show_toast(mensagem='MIDI exportado.')
+            self._show_toast(message='MIDI exportado.')
         dialog.destroy()
 
-    def _show_toast(self, mensagem: str) -> None:
-        toast: Adw.Toast = Adw.Toast(title=mensagem, timeout=3)
+    def _show_toast(self, message: str) -> None:
+        toast: Adw.Toast = Adw.Toast(title=message, timeout=3)
         self.toast_overlay.add_toast(toast)
 
 
-class Aplicacao(Adw.Application):
+class Application(Adw.Application):
     def __init__(self) -> None:
         super().__init__(application_id='br.ufrgs.inf01120.tcp')
-        self.window: JanelaPrincipal | None = None
+        self.window: MainWindow | None = None
 
     @override
     def do_activate(self) -> None:
         if not self.window:
-            self.window = JanelaPrincipal(app=self)
+            self.window = MainWindow(app=self)
         self.window.present()
 
     @override

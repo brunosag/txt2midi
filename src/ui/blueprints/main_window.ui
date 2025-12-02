@@ -10,25 +10,25 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
     <section>
       <item>
         <attribute name="label" translatable="yes">Importar texto...</attribute>
-        <attribute name="action">win.abrir_txt</attribute>
+        <attribute name="action">win.open_txt</attribute>
       </item>
       <item>
         <attribute name="label" translatable="yes">Importar MIDI...</attribute>
-        <attribute name="action">win.importar_midi</attribute>
+        <attribute name="action">win.import_midi</attribute>
       </item>
     </section>
     <section>
       <item>
         <attribute name="label" translatable="yes">Salvar texto...</attribute>
-        <attribute name="action">win.salvar_txt</attribute>
+        <attribute name="action">win.save_txt</attribute>
       </item>
       <item>
         <attribute name="label" translatable="yes">Salvar MIDI...</attribute>
-        <attribute name="action">win.salvar_midi</attribute>
+        <attribute name="action">win.save_midi</attribute>
       </item>
     </section>
   </menu>
-  <template class="JanelaPrincipal" parent="AdwApplicationWindow">
+  <template class="MainWindow" parent="AdwApplicationWindow">
     <property name="title">txt2midi</property>
     <property name="default-width">430</property>
     <property name="default-height">750</property>
@@ -79,13 +79,13 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
               <object class="GtkBox">
                 <property name="spacing">6</property>
                 <child>
-                  <object class="GtkButton" id="btn_tocar">
+                  <object class="GtkButton" id="btn_play">
                     <property name="icon-name">media-playback-start-symbolic</property>
                     <property name="tooltip-text" translatable="yes">Tocar música</property>
                   </object>
                 </child>
                 <child>
-                  <object class="GtkButton" id="btn_parar">
+                  <object class="GtkButton" id="btn_stop">
                     <property name="icon-name">media-playback-stop-symbolic</property>
                     <property name="tooltip-text" translatable="yes">Parar reprodução</property>
                     <property name="sensitive">false</property>

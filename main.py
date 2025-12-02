@@ -1,7 +1,7 @@
 import sys
 
-from ui.main_window import Aplicacao
+from ui.main_window import Application
 
 if __name__ == '__main__':
-    app = Aplicacao()
+    app = Application()
     sys.exit(app.run(sys.argv))

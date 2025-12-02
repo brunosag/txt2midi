@@ -5,27 +5,27 @@ menu primary_menu {
   section {
     item {
       label: _("Importar texto...");
-      action: "win.abrir_txt";
+      action: "win.open_txt";
     }
     item {
       label: _("Importar MIDI...");
-      action: "win.importar_midi";
+      action: "win.import_midi";
     }
   }
 
   section {
     item {
       label: _("Salvar texto...");
-      action: "win.salvar_txt";
+      action: "win.save_txt";
     }
     item {
       label: _("Salvar MIDI...");
-      action: "win.salvar_midi";
+      action: "win.save_midi";
     }
   }
 }
 
-template $JanelaPrincipal : Adw.ApplicationWindow {
+template $MainWindow : Adw.ApplicationWindow {
   title: "txt2midi";
   default-width: 430;
   default-height: 750;
@@ -70,12 +70,12 @@ template $JanelaPrincipal : Adw.ApplicationWindow {
       Gtk.Box {
         spacing: 6;
 
-        Gtk.Button btn_tocar {
+        Gtk.Button btn_play {
           icon-name: "media-playback-start-symbolic";
           tooltip-text: _("Tocar música");
         }
 
-        Gtk.Button btn_parar {
+        Gtk.Button btn_stop {
           icon-name: "media-playback-stop-symbolic";
           tooltip-text: _("Parar reprodução");
           sensitive: false;
