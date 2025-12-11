@@ -1,0 +1,15 @@
+flowchart TB
+    Input([Arquivo MIDI]) --> Stage1
+    
+    subgraph Pipeline [Pipeline de Conversão]
+        direction TB
+        Stage1["<b>1. Extração Linear</b><br/>Unificação de trilhas e<br/>cálculo de durações"]
+        
+        Stage2["<b>2. Monofonia</b><br/>Ordenação Temporal +<br/>Prioridade de Agudos"]
+        
+        Stage3["<b>3. Transpilação</b><br/>Conversão de Deltas<br/>(Tempo/Inst/Vol) em Texto"]
+
+        Stage1 --> Stage2 --> Stage3
+    end
+
+    Stage3 --> Output([Texto MML])

@@ -1,0 +1,25 @@
+graph TD
+    subgraph "Camada de Desenvolvimento"
+        A[Python] 
+        B[Blueprint]
+    end
+
+    subgraph "Introspecção"
+        C[PyGObject]
+    end
+
+    subgraph "Nativo"
+        %% Adicionamos 'direction LR' para forçar alinhamento horizontal interno se necessário,
+        %% mas conectar C a ambos já costuma resolver.
+        D[Libadwaita]
+        E[GTK 4]
+    end
+
+    %% Conexões
+    A --> C
+    B -.->|Compilação| C
+    
+    %% Conectar a ponte a AMBOS os nós nativos coloca-os no mesmo nível (fundo)
+    C --> D
+    C --> E
+    

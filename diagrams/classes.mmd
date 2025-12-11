@@ -1,0 +1,99 @@
+classDiagram
+    direction TB
+
+    namespace Aplicacao {
+        class MusicController {
+            -parser : TextParser
+            -exporter : MIDIExporter
+            -importer : MIDIImporter
+            -current_player : FluidSynthPlayer
+            +play_music(text, settings, mode, font)
+            +stop_music()
+            +export_midi(text, settings, mode, path)
+            +import_midi(path)
+        }
+    }
+
+    namespace Dominio {
+        class MusicEvent {
+            +time : float
+            +source_index : int
+            +source_length : int
+        }
+        
+        class NoteEvent {
+            +pitch : int
+            +volume : int
+            +duration : float
+        }
+
+        class InstrumentEvent {
+            +instrument_id : int
+        }
+
+        class TempoEvent {
+            +bpm : int
+        }
+        
+        class PlaybackSettings {
+            +bpm : int
+            +volume : int
+            +octave : int
+            +instrument_id : int
+        }
+
+        class TextParser {
+            +parse(text, settings, mode) : List~MusicEvent~
+        }
+        
+        class MusicParser {
+            <<Interface>>
+            +parse(text, settings)* : List~MusicEvent~
+        }
+        
+        class StandardParser {
+            -dispatch_table : dict
+            +parse()
+        }
+        
+        class MMLParser {
+            -TOKEN_REGEX_MML : Pattern
+            +parse()
+        }
+    }
+
+    namespace Infraestrutura {
+        class FluidSynthPlayer {
+            -fs : fluidsynth.Synth
+            -events : List~MusicEvent~
+            +run()
+            +stop()
+            -_process_event()
+        }
+        
+        class MIDIExporter {
+            +save(events, path)
+        }
+        
+        class MIDIImporter {
+            +load(path) : ConversionResult
+        }
+    }
+
+    MusicController --> TextParser : usa
+    MusicController --> FluidSynthPlayer : cria/gerencia
+    MusicController --> MIDIExporter : usa
+    MusicController --> MIDIImporter : usa
+
+    TextParser ..> MusicParser : seleciona estratégia
+    MusicParser <|-- StandardParser
+    MusicParser <|-- MMLParser
+    
+    FluidSynthPlayer --> MusicEvent : consome
+    MIDIExporter --> MusicEvent : consome
+    StandardParser ..> MusicEvent : produz
+    MMLParser ..> MusicEvent : produz
+    
+    MusicEvent <|-- NoteEvent
+    MusicEvent <|-- InstrumentEvent
+    MusicEvent <|-- TempoEvent

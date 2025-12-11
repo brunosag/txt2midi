@@ -1,0 +1,20 @@
+graph TD
+    subgraph "Main Thread"
+        UI[Interface gráfica]
+    end
+
+    subgraph "Playback"
+        Player[FluidSynthPlayer]
+        Engine["FluidSynth (C)"]
+    end
+
+    SF2[(SoundFont)]
+
+    %% Fluxo de Controle e Dados
+    UI -->|1. Inicia playback| Player
+    Player -->|2. Carrega| SF2
+    SF2 -->|Samples| Engine
+    Player -->|3. Envia notas| Engine
+    
+    %% Feedback Visual
+    Player -.->|4. Callback visual| UI

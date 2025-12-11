@@ -10,12 +10,7 @@ from ui.components import EditorPage
 gi.require_version(namespace='Gtk', version='4.0')
 gi.require_version(namespace='Adw', version='1')
 
-from gi.repository import (  # noqa: E402
-    Adw,  # pyright: ignore[reportMissingModuleSource]
-    Gio,  # pyright: ignore[reportMissingModuleSource]
-    GLib,  # pyright: ignore[reportMissingModuleSource]
-    Gtk,  # pyright: ignore[reportMissingModuleSource]
-)
+from gi.repository import Adw, Gio, GLib, Gtk
 
 
 @Gtk.Template(filename='src/ui/blueprints/main_window.ui')

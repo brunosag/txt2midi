@@ -9,14 +9,7 @@ gi.require_version(namespace='Gtk', version='4.0')
 gi.require_version(namespace='Adw', version='1')
 gi.require_version(namespace='GtkSource', version='5')
 
-from gi.repository import (  # noqa: E402
-    Adw,  # pyright: ignore[reportMissingModuleSource]
-    Gdk,  # pyright: ignore[reportMissingModuleSource]
-    Gio,  # pyright: ignore[reportMissingModuleSource]
-    GObject,  # pyright: ignore[reportMissingModuleSource]
-    Gtk,  # pyright: ignore[reportMissingModuleSource]
-    GtkSource,  # pyright: ignore[reportMissingModuleSource]
-)
+from gi.repository import Adw, Gdk, GObject, Gtk, GtkSource
 
 GObject.type_ensure(GtkSource.View)
 
